@@ -87,8 +87,7 @@ class TargetModel(LightningModule):
     def shared_step(self, batch):
         imgs, labels = batch
 
-        preds = torch.zeros(labels.size(0), 10)
-        preds = preds.type_as(labels)
+        preds = torch.zeros(labels.size(0), 10, device=self.device)
         preds = self.input_net(imgs)
         preds = preds.view(-1, 64 * 4 * 4)
         preds = self.output_net(preds)
