@@ -52,6 +52,8 @@ class AdvGAN(LightningModule):
         self.model = TargetModel.load_from_checkpoint(checkpoint_path=checkpoint_path)
 
         self.C = 0.1
+        # To scale the importance of losses
+        self.gen_lambda = 1
         self.adv_lambda = 10
         self.pert_lambda = 1
 
@@ -65,55 +67,24 @@ class AdvGAN(LightningModule):
         imgs, labels = batch
 
         perturbation = self.generator(imgs)
-        adv_images = torch.clamp(perturbation, -0.3, 0.3) + imgs
-        adv_images = torch.clamp(adv_images, self.box_min, self.box_max)
+        adv_imgs = torch.clamp(perturbation, -0.3, 0.3) + imgs
+        adv_imgs = torch.clamp(adv_imgs, self.box_min, self.box_max)
 
         if optimizer_idx == 0:
-            pred_fake = self.discriminator(adv_images)
-            
-            valid = torch.ones_like(pred_fake, device=self.device)
-            
-            lossG_fake = self.loss(pred_fake, valid)
+            lossG_fake = self.generator_loss_fake(adv_imgs)
+            loss_perturb = self.perturbation_loss(perturbation)
+            loss_adv = self.target_model_loss(adv_imgs, labels)
 
-            # Soft hinge loss to bound the magnitude of the perturbation
-            # Implementation from https://github.com/mathcbc/advGAN_pytorch does this
-            '''
-            norm_perturb = torch.norm(perturbation, 2, dim=1)
-            loss_perturb = torch.mean(norm_perturb)
-            '''
-            # Paper does this
-            norm_perturb = torch.norm(perturbation, 2)
-            loss_perturb = torch.max(norm_perturb - self.C, torch.zeros(1, device=self.device))
-
-            # Loss of fooling the target model:
             # Implementation from https://github.com/mathcbc/advGAN_pytorch
-            preds = self.model(adv_images)
-            probs = F.softmax(preds, dim=1)
-            onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
+            # lossG = self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
+            # My implementation
+            loss_generator = self.gen_lambda + lossG_fake + self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
 
-            # C&W loss function
-            real = onehot_labels * probs
-            real = torch.max(real, dim=1)
-
-            # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
-            other = (1 - onehot_labels) * probs
-            other, _ = torch.max(other, dim=1)
-
-            zeros = torch.zeros_like(other)
-
-            # If any other class than the ground truth was predicted the loss is zero
-            # Otherwise the loss is the difference between
-            # the prob of the ground truth and the second highest prob
-            loss_adv = torch.max(real - other, zeros)
-            loss_adv = torch.sum(loss_adv)
-
-            lossG = self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
-            
             losses = {
                 "lossG_fake": lossG_fake,
                 "loss_perturb": loss_perturb,
                 "loss_adv": loss_adv,
-                "lossG": lossG,
+                "lossG": loss_generator,
             }
 
             self.log_dict(
@@ -123,10 +94,10 @@ class AdvGAN(LightningModule):
                 on_epoch=True
             )
             
-            return lossG
+            return loss_generator
 
         if optimizer_idx == 1:
-            loss_discriminator = self.discriminator_loss(imgs, adv_images)
+            loss_discriminator = self.discriminator_loss(imgs, adv_imgs)
             
             losses = {
                 "loss_discriminator": loss_discriminator,
@@ -141,6 +112,55 @@ class AdvGAN(LightningModule):
 
             return loss_discriminator
 
+    def generator_loss_fake(self, adv_imgs):
+        pred_fake = self.discriminator(adv_imgs)
+        valid = torch.ones_like(pred_fake, device=self.device)
+        lossG_fake = self.loss(pred_fake, valid)
+
+        return lossG_fake
+
+    # Soft hinge loss to bound the magnitude of the perturbation
+    def perturbation_loss(self, perturbation):
+        # Implementation from https://github.com/mathcbc/advGAN_pytorch does this
+        """
+        norm_perturb = torch.norm(perturbation, 2, dim=1)
+        loss_perturb = torch.mean(norm_perturb)
+        """
+        # Paper does this
+        norm_perturb = torch.norm(perturbation, 2)
+        loss_perturb = torch.max(norm_perturb - self.C, torch.zeros(1, device=self.device))
+
+        return loss_perturb
+
+    def target_model_loss(self, adv_imgs, labels):
+        # Loss of fooling the target model:
+        # Implementation from https://github.com/mathcbc/advGAN_pytorch
+        preds = self.model(adv_imgs)
+        probs = F.softmax(preds, dim=1)
+        onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
+
+        # C&W loss function
+
+        # Probabilities of ground truth
+        real = onehot_labels * probs
+        real = torch.sum(real, dim=1)
+
+        # Probabilities of the remaining classes
+        # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
+        other = (1 - onehot_labels) * probs
+        other, _ = torch.max(other, dim=1)
+
+        zeros = torch.zeros_like(other)
+
+        # If any other class than the ground truth was predicted the loss is zero
+        # Otherwise the loss is the difference between
+        # the prob of the ground truth and the second highest prob
+        # In paper they do (other - real) which does not really makes sense to me
+        loss_adv = torch.max(real - other, zeros)
+        loss_adv = torch.sum(loss_adv)
+
+        return loss_adv
+
     def discriminator_loss_real(self, imgs):
         pred_real = self.discriminator(imgs)
         valid = torch.ones_like(pred_real, device=self.device)
@@ -148,18 +168,18 @@ class AdvGAN(LightningModule):
 
         return lossD_real
 
-    def discriminator_loss_fake(self, imgs, adv_images):
-        pred_fake = self.discriminator(adv_images.detach())
+    def discriminator_loss_fake(self, adv_imgs):
+        pred_fake = self.discriminator(adv_imgs.detach())
         fake = torch.zeros_like(pred_fake, device=self.device)
         lossD_fake = self.loss(pred_fake, fake)
 
         return lossD_fake
 
-    def discriminator_loss(self, imgs, adv_images):
-        lossD_real = self.discriminator_loss_real(imgs)
-        lossD_fake = self.discriminator_loss_fake(imgs, adv_images)
+    def discriminator_loss(self, imgs, adv_imgs):
+        loss_real = self.discriminator_loss_real(imgs)
+        loss_fake = self.discriminator_loss_fake(adv_imgs)
 
-        loss_discriminator = (lossD_fake + lossD_real) / 2
+        loss_discriminator = (loss_real + loss_fake) / 2
 
         return loss_discriminator
 
