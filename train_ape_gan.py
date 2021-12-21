@@ -8,7 +8,8 @@ import os
 
 os.environ['WANDB_SAVE_CODE'] = "true"
 
-from models.ape_gan_lightning.system import ApeGan
+from models.ape_gan_lightning.ape_gan import ApeGan
+from models.adv_gan_lightning.adv_gan import AdvGAN
 from config import Config
 
 pl.seed_everything(36)
@@ -23,12 +24,21 @@ dm = MNISTDataModule(
     drop_last=True
 )
 
+attack = AdvGAN(
+    model_num_labels=10, 
+    image_nc=1, 
+    box_min=0, 
+    box_max=1, 
+    checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'
+)
+
 model = ApeGan(
     1, 
     Config.APE_GAN_xi1, 
     Config.APE_GAN_xi2, 
     Config.APE_GAN_lr, 
-    Config.APE_GAN_checkpoint
+    Config.APE_GAN_checkpoint,
+    attack=attack
 )
 
 wandb_logger = pl_loggers.WandbLogger(
@@ -41,7 +51,7 @@ wandb_logger.watch(model)
 
 checkpoint_callback = ModelCheckpoint(
     f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/', 
-    monitor = "val_loss", 
+    monitor = "validation_loss_generator", 
     save_top_k = 1, 
     save_last = True, 
     mode='min'

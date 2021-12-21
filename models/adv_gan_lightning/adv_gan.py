@@ -7,6 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 
+import wandb
+
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
@@ -27,6 +29,8 @@ class AdvGAN(LightningModule):
             b1: float = 0.5,
             b2: float = 0.999,
             checkpoint_path: str = "target.ckpt",
+            num_batches_to_log = 1,
+            num_samples_to_log = 16,
             **kwargs
     ):
         super().__init__()
@@ -57,60 +61,98 @@ class AdvGAN(LightningModule):
         self.adv_lambda = 10
         self.pert_lambda = 1
 
-    def forward(self, z):
-        return self.generator(z)
+        self.num_batches_to_log = num_batches_to_log
+        self.num_samples_to_log = num_samples_to_log
 
-    def loss(self, y_hat, y):
-        return F.mse_loss(y_hat, y)
+    def forward(self, z):
+        perturbations, adv_imgs = self.generate_adv_imgs(z)
+
+        return adv_imgs
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         imgs, labels = batch
 
+        perturbation, adv_imgs = self.generate_adv_imgs(imgs)
+
+        if optimizer_idx == 0:
+            losses = self.generator_losses(labels, adv_imgs, perturbation, 'train')
+            
+            return losses["train_loss_generator"]
+
+        if optimizer_idx == 1:
+            losses = self.discriminator_loss(imgs, adv_imgs, 'train')
+            
+            return losses["train_loss_discriminator"]
+
+    def validation_step(self, batch, batch_idx):
+        imgs, labels = batch
+
+        perturbation, adv_imgs = self.generate_adv_imgs(imgs)
+        losses = self.generator_losses(labels, adv_imgs, perturbation, 'validation')
+
+        return imgs, labels, perturbation, adv_imgs
+
+    def validation_epoch_end(self, outputs):
+        imgs_batches, labels_batches, perturbation_batches, adv_imgs_batches = [torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in range(len(outputs[0]))]
+        preds_batches = labels_batches
+
+        wandb.log({
+            "pred_imgs": [
+                wandb.Image(
+                    img,
+                    caption=f'Pred: {pred}, Label: {label}'
+                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, preds_batches) for img, pred, label in zip(imgs, labels, preds)
+            ],
+            "pred_adv_imgs": [
+                wandb.Image(
+                    adv_img,
+                    caption=f'Pred: {pred}, Label: {label}'
+                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, preds_batches) for adv_img, pred, label in zip(adv_imgs, labels, preds)
+            ],
+            "perturbation": [
+                wandb.Image(
+                    perturbation,
+                    caption=f'Label: {label}'
+                ) for labels, perturbations in zip(labels_batches, perturbation_batches) for label, perturbation in zip(labels, perturbations)
+            ]
+        })
+
+    def loss(self, y_hat, y):
+        return F.mse_loss(y_hat, y)
+
+    def generate_adv_imgs(self, imgs):
         perturbation = self.generator(imgs)
         adv_imgs = torch.clamp(perturbation, -0.3, 0.3) + imgs
         adv_imgs = torch.clamp(adv_imgs, self.box_min, self.box_max)
 
-        if optimizer_idx == 0:
-            lossG_fake = self.generator_loss_fake(adv_imgs)
-            loss_perturb = self.perturbation_loss(perturbation)
-            loss_adv = self.target_model_loss(adv_imgs, labels)
+        return perturbation, adv_imgs
 
-            # Implementation from https://github.com/mathcbc/advGAN_pytorch
-            # lossG = self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
-            # My implementation
-            loss_generator = (self.adv_lambda * loss_adv) + (self.gen_lambda * lossG_fake) + (self.pert_lambda * loss_perturb)
+    def generator_losses(self, labels, adv_imgs, perturbation, stage='train'):
+        loss_generator_fake = self.generator_loss_fake(adv_imgs)
+        loss_perturb = self.perturbation_loss(perturbation)
+        loss_adv = self.target_model_loss(adv_imgs, labels)
 
-            losses = {
-                "lossG_fake": lossG_fake,
-                "loss_perturb": loss_perturb,
-                "loss_adv": loss_adv,
-                "lossG": loss_generator,
-            }
+        # Implementation from https://github.com/mathcbc/advGAN_pytorch
+        # lossG = self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
+        # My implementation
+        loss_generator = (self.adv_lambda * loss_adv) + (self.gen_lambda * loss_generator_fake) + (self.pert_lambda * loss_perturb)
 
-            self.log_dict(
-                losses,
-                prog_bar=True,
-                on_step=True,
-                on_epoch=True
-            )
-            
-            return loss_generator
+        losses = {
+            f"{stage}_loss_generator_fake": loss_generator_fake,
+            f"{stage}_loss_perturb": loss_perturb,
+            f"{stage}_loss_adv": loss_adv,
+            f"{stage}_loss_generator": loss_generator,
+        }
 
-        if optimizer_idx == 1:
-            loss_discriminator = self.discriminator_loss(imgs, adv_imgs)
-            
-            losses = {
-                "loss_discriminator": loss_discriminator,
-            }
+        self.log_dict(
+            losses,
+            prog_bar=True,
+            on_step=True,
+            on_epoch=True
+        )
 
-            self.log_dict(
-                losses,
-                prog_bar=True,
-                on_step=True,
-                on_epoch=True
-            )
+        return losses 
 
-            return loss_discriminator
 
     def generator_loss_fake(self, adv_imgs):
         pred_fake = self.discriminator(adv_imgs)
@@ -174,13 +216,24 @@ class AdvGAN(LightningModule):
 
         return lossD_fake
 
-    def discriminator_loss(self, imgs, adv_imgs):
+    def discriminator_loss(self, imgs, adv_imgs, stage='train'):
         loss_real = self.discriminator_loss_real(imgs)
         loss_fake = self.discriminator_loss_fake(adv_imgs)
 
         loss_discriminator = (loss_real + loss_fake) / 2
 
-        return loss_discriminator
+        losses = {
+            f"{stage}_loss_discriminator": loss_discriminator,
+        }
+
+        self.log_dict(
+            losses,
+            prog_bar=True,
+            on_step=True,
+            on_epoch=True
+        )
+
+        return losses
 
     def configure_optimizers(self):
         lr = self.hparams.lr

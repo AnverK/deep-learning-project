@@ -41,7 +41,7 @@ wandb_logger.watch(model)
 
 checkpoint_callback = ModelCheckpoint(
     f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/', 
-    monitor = "lossG", 
+    monitor = "validation_loss_generator", 
     save_top_k = 1, 
     save_last = True, 
     mode='min'

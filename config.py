@@ -17,4 +17,4 @@ class Config():
     APE_GAN_epochs=5
     APE_GAN_xi1=0.7
     APE_GAN_xi2=0.3
-    APE_GAN_checkpoint=f"{LOGS_PATH}/{APE_GAN_FOLDER}/last.chkpt"
+    APE_GAN_checkpoint=f"{LOGS_PATH}/{APE_GAN_FOLDER}/last.ckpt"
