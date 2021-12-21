@@ -5,6 +5,7 @@ from torch import nn
 from .models import MnistCNN, CifarCNN, Generator, Discriminator
 from ..adv_gan_lightning.target_model import TargetModel
 
+from torchmetrics.functional import accuracy
 import wandb
 
 class ApeGan(pl.LightningModule):
@@ -42,6 +43,8 @@ class ApeGan(pl.LightningModule):
 
         if target_checkpoint_path is not None:
             self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_checkpoint_path)
+            self.target_model.freeze()
+            self.target_model.eval()
 
     def forward(self, z):
         return self.generator(z)
@@ -99,6 +102,10 @@ class ApeGan(pl.LightningModule):
             y = X_adv.clone()
             X_adv = self.attack(X)
 
+            X_res = self.generator(X_adv)
+
+            y_original_pred, y_adversarial_pred, y_restored_pred = self.target_model_metrics(X, y, X_adv, X_res)
+
         t_real = torch.ones(X.shape[0], device=self.device)
         t_fake = torch.zeros(X.shape[0], device=self.device)
 
@@ -121,30 +128,53 @@ class ApeGan(pl.LightningModule):
             on_epoch=True
         )
 
-        return X, y, X_adv, X_fake
+        return X, y, X_adv, X_fake, y_original_pred, y_adversarial_pred, y_restored_pred
+
+    def target_model_metrics(self, imgs, labels, adv_imgs, res_imgs, stage='validation'):
+        y_original_pred = self.target_model(imgs).argmax(1)
+        y_adversarial_pred = self.target_model(adv_imgs).argmax(1)
+        y_restored_pred = self.target_model(res_imgs).argmax(1)
+
+        accuracy_original = accuracy(y_original_pred, labels)
+        accuracy_adversarial = accuracy(y_adversarial_pred, labels)
+        accuracy_restored = accuracy(y_restored_pred, labels)
+
+        losses = {
+            f"{stage}_accuracy_original": accuracy_original,
+            f"{stage}_accuracy_adversarial": accuracy_adversarial,
+            f"{stage}_accuracy_restored": accuracy_restored,
+        }
+
+        self.log_dict(
+            losses,
+            prog_bar=True,
+            on_step=True,
+            on_epoch=True
+        )
+
+        return y_original_pred, y_adversarial_pred, y_restored_pred
 
     def validation_epoch_end(self, outputs):
-        imgs_batches, labels_batches, adv_imgs_batches, res_imgs_batches = [torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in range(len(outputs[0]))]
-        preds_batches = labels_batches
+        imgs_batches, labels_batches, adv_imgs_batches, res_imgs_batches, y_original_pred, y_adversarial_pred, y_restored_pred = [torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in range(len(outputs[0]))]
 
         wandb.log({
             "original_imgs": [
                 wandb.Image(
                     img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, preds_batches) for img, pred, label in zip(imgs, labels, preds)
-            ],
+                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, y_original_pred) for img, pred, label in zip(imgs, labels, preds)
+            ] if self.current_epoch == 0 else None,
             "attack_imgs": [
                 wandb.Image(
                     adv_img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, preds_batches) for adv_img, pred, label in zip(adv_imgs, labels, preds)
-            ],
+                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, y_adversarial_pred) for adv_img, pred, label in zip(adv_imgs, labels, preds)
+            ] if self.current_epoch == 0 else None,
             "restored_imgs": [
                 wandb.Image(
                     res_img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for res_imgs, labels, preds in zip(res_imgs_batches, labels_batches, preds_batches) for res_img, pred, label in zip(res_imgs, labels, preds)
+                ) for res_imgs, labels, preds in zip(res_imgs_batches, labels_batches, y_restored_pred) for res_img, pred, label in zip(res_imgs, labels, preds)
             ],
         })
 

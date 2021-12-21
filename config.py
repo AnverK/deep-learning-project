@@ -1,5 +1,5 @@
 class Config():
-    NUM_WORKERS = 0
+    NUM_WORKERS = 4
 
     TARGET_MODEL_BATCH_SIZE = 256
     TARGET_MODEL_FOLDER = 'target_model'

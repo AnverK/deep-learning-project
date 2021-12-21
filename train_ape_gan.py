@@ -31,6 +31,8 @@ attack = AdvGAN(
     box_max=1, 
     checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'
 )
+attack.freeze()
+attack.eval()
 
 model = ApeGan(
     1, 
@@ -38,7 +40,8 @@ model = ApeGan(
     Config.APE_GAN_xi2, 
     Config.APE_GAN_lr, 
     Config.APE_GAN_checkpoint,
-    attack=attack
+    attack=attack,
+    target_checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'
 )
 
 wandb_logger = pl_loggers.WandbLogger(
@@ -61,7 +64,7 @@ callbacks = [checkpoint_callback]
 
 trainer = Trainer(
     gpus=-1, 
-    max_epochs = 5, 
+    max_epochs = 20, 
     precision = 16, 
     callbacks = callbacks, 
     benchmark=True,

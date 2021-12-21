@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_lightning import LightningModule
 
+from torchmetrics.functional import accuracy
 import wandb
 
 def weights_init(m):
@@ -53,7 +54,9 @@ class AdvGAN(LightningModule):
         self.generator.apply(weights_init)
         self.discriminator.apply(weights_init)
 
-        self.model = TargetModel.load_from_checkpoint(checkpoint_path=checkpoint_path)
+        self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=checkpoint_path)
+        self.target_model.freeze()
+        self.target_model.eval()
 
         self.C = 0.1
         # To scale the importance of losses
@@ -90,24 +93,25 @@ class AdvGAN(LightningModule):
         perturbation, adv_imgs = self.generate_adv_imgs(imgs)
         losses = self.generator_losses(labels, adv_imgs, perturbation, 'validation')
 
-        return imgs, labels, perturbation, adv_imgs
+        labels_original_pred, labels_adversarial_pred = self.target_model_metrics(imgs, labels, adv_imgs)
+
+        return imgs, labels, perturbation, adv_imgs, labels_original_pred, labels_adversarial_pred
 
     def validation_epoch_end(self, outputs):
-        imgs_batches, labels_batches, perturbation_batches, adv_imgs_batches = [torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in range(len(outputs[0]))]
-        preds_batches = labels_batches
+        imgs_batches, labels_batches, perturbation_batches, adv_imgs_batches, labels_original_pred_batches, labels_adversarial_pred_batches = [torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in range(len(outputs[0]))]
 
         wandb.log({
             "pred_imgs": [
                 wandb.Image(
                     img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, preds_batches) for img, pred, label in zip(imgs, labels, preds)
-            ],
+                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, labels_original_pred_batches) for img, pred, label in zip(imgs, labels, preds)
+            ] if self.current_epoch == 0 else None,
             "pred_adv_imgs": [
                 wandb.Image(
                     adv_img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, preds_batches) for adv_img, pred, label in zip(adv_imgs, labels, preds)
+                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, labels_adversarial_pred_batches) for adv_img, pred, label in zip(adv_imgs, labels, preds)
             ],
             "perturbation": [
                 wandb.Image(
@@ -116,6 +120,27 @@ class AdvGAN(LightningModule):
                 ) for labels, perturbations in zip(labels_batches, perturbation_batches) for label, perturbation in zip(labels, perturbations)
             ]
         })
+
+    def target_model_metrics(self, imgs, labels, adv_imgs, stage='validation'):
+        labels_original_pred = self.target_model(imgs).argmax(1)
+        labels_adversarial_pred = self.target_model(adv_imgs).argmax(1)
+
+        accuracy_original = accuracy(labels_original_pred, labels)
+        accuracy_adversarial = accuracy(labels_adversarial_pred, labels)
+
+        losses = {
+            f"{stage}_accuracy_original": accuracy_original,
+            f"{stage}_accuracy_adversarial": accuracy_adversarial,
+        }
+
+        self.log_dict(
+            losses,
+            prog_bar=True,
+            on_step=True,
+            on_epoch=True
+        )
+
+        return labels_original_pred, labels_adversarial_pred
 
     def loss(self, y_hat, y):
         return F.mse_loss(y_hat, y)
@@ -176,7 +201,7 @@ class AdvGAN(LightningModule):
     def target_model_loss(self, adv_imgs, labels):
         # Loss of fooling the target model:
         # Implementation from https://github.com/mathcbc/advGAN_pytorch
-        preds = self.model(adv_imgs)
+        preds = self.target_model(adv_imgs)
         probs = F.softmax(preds, dim=1)
         onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
 
