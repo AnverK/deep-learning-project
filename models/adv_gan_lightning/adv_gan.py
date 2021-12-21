@@ -78,7 +78,7 @@ class AdvGAN(LightningModule):
             # Implementation from https://github.com/mathcbc/advGAN_pytorch
             # lossG = self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
             # My implementation
-            loss_generator = self.gen_lambda + lossG_fake + self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
+            loss_generator = (self.adv_lambda * loss_adv) + (self.gen_lambda * lossG_fake) + (self.pert_lambda * loss_perturb)
 
             losses = {
                 "lossG_fake": lossG_fake,
@@ -126,9 +126,8 @@ class AdvGAN(LightningModule):
         norm_perturb = torch.norm(perturbation, 2, dim=1)
         loss_perturb = torch.mean(norm_perturb)
         """
-        # Paper does this
-        norm_perturb = torch.norm(perturbation, 2)
-        loss_perturb = torch.max(norm_perturb - self.C, torch.zeros(1, device=self.device))
+        norm_perturb = torch.norm(perturbation, 2, dim=1)
+        loss_perturb = torch.mean(torch.max(norm_perturb - self.C, torch.zeros(1, device=self.device)))
 
         return loss_perturb
 
