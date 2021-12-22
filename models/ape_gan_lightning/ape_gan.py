@@ -46,6 +46,8 @@ class ApeGan(pl.LightningModule):
             self.target_model.freeze()
             self.target_model.eval()
 
+        self.attack_batches = []
+
     def forward(self, z):
         return self.generator(z)
 
@@ -96,11 +98,16 @@ class ApeGan(pl.LightningModule):
         )
 
     def validation_step(self, batch, batch_idx):
-        X, X_adv = batch
+        X, X_adv = batch            
 
         if self.attack is not None:
             y = X_adv.clone()
-            X_adv = self.attack(X)
+            
+            if self.current_epoch == 0:
+                X_adv = self.attack(X)
+                self.attack_batches.append(X_adv)
+            else:
+                X_adv = self.attack_batches[batch_idx]
 
             X_res = self.generator(X_adv)
 

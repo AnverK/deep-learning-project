@@ -105,13 +105,13 @@ class AdvGAN(LightningModule):
                 wandb.Image(
                     img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, labels_original_pred_batches) for img, pred, label in zip(imgs, labels, preds)
+                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, labels_original_pred_batches) for img, label, pred in zip(imgs, labels, preds)
             ] if self.current_epoch == 0 else None,
             "pred_adv_imgs": [
                 wandb.Image(
                     adv_img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, labels_adversarial_pred_batches) for adv_img, pred, label in zip(adv_imgs, labels, preds)
+                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, labels_adversarial_pred_batches) for adv_img, label, pred in zip(adv_imgs, labels, preds)
             ],
             "perturbation": [
                 wandb.Image(
@@ -142,11 +142,9 @@ class AdvGAN(LightningModule):
 
         return labels_original_pred, labels_adversarial_pred
 
-    def loss(self, y_hat, y):
-        return F.mse_loss(y_hat, y)
-
     def generate_adv_imgs(self, imgs):
         perturbation = self.generator(imgs)
+
         adv_imgs = torch.clamp(perturbation, -0.3, 0.3) + imgs
         adv_imgs = torch.clamp(adv_imgs, self.box_min, self.box_max)
 
@@ -155,7 +153,7 @@ class AdvGAN(LightningModule):
     def generator_losses(self, labels, adv_imgs, perturbation, stage='train'):
         loss_generator_fake = self.generator_loss_fake(adv_imgs)
         loss_perturb = self.perturbation_loss(perturbation)
-        loss_adv = self.target_model_loss(adv_imgs, labels)
+        loss_adv = self.adversarial_loss(adv_imgs, labels)
 
         # Implementation from https://github.com/mathcbc/advGAN_pytorch
         # lossG = self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
@@ -182,23 +180,20 @@ class AdvGAN(LightningModule):
     def generator_loss_fake(self, adv_imgs):
         pred_fake = self.discriminator(adv_imgs)
         valid = torch.ones_like(pred_fake, device=self.device)
-        lossG_fake = self.loss(pred_fake, valid)
+        lossG_fake = F.binary_cross_entropy_with_logits(pred_fake, valid)
 
         return lossG_fake
 
     # Soft hinge loss to bound the magnitude of the perturbation
     def perturbation_loss(self, perturbation):
-        # Implementation from https://github.com/mathcbc/advGAN_pytorch does this
-        """
-        norm_perturb = torch.norm(perturbation, 2, dim=1)
-        loss_perturb = torch.mean(norm_perturb)
-        """
+        return F.mse_loss(perturbation, torch.zeros_like(perturbation, device=self.device))
+
         norm_perturb = torch.norm(perturbation, 2, dim=1)
         loss_perturb = torch.mean(torch.max(norm_perturb - self.C, torch.zeros(1, device=self.device)))
 
         return loss_perturb
 
-    def target_model_loss(self, adv_imgs, labels):
+    def adversarial_loss(self, adv_imgs, labels):
         # Loss of fooling the target model:
         # Implementation from https://github.com/mathcbc/advGAN_pytorch
         preds = self.target_model(adv_imgs)
@@ -218,10 +213,6 @@ class AdvGAN(LightningModule):
 
         zeros = torch.zeros_like(other)
 
-        # If any other class than the ground truth was predicted the loss is zero
-        # Otherwise the loss is the difference between
-        # the prob of the ground truth and the second highest prob
-        # In paper they do (other - real) which does not really makes sense to me
         loss_adv = torch.max(real - other, zeros)
         loss_adv = torch.sum(loss_adv)
 
@@ -230,14 +221,16 @@ class AdvGAN(LightningModule):
     def discriminator_loss_real(self, imgs):
         pred_real = self.discriminator(imgs)
         valid = torch.ones_like(pred_real, device=self.device)
-        lossD_real = self.loss(pred_real, valid)
+        lossD_real = F.binary_cross_entropy_with_logits(pred_real, valid) 
+        #lossD_real = F.mse_loss(pred_real, valid) # why mse instead of bce?
 
         return lossD_real
 
     def discriminator_loss_fake(self, adv_imgs):
-        pred_fake = self.discriminator(adv_imgs.detach())
+        pred_fake = self.discriminator(adv_imgs)
         fake = torch.zeros_like(pred_fake, device=self.device)
-        lossD_fake = self.loss(pred_fake, fake)
+        lossD_fake = F.binary_cross_entropy_with_logits(pred_fake, fake)
+        #lossD_real = F.mse_loss(pred_fake, fake)
 
         return lossD_fake
 
@@ -245,7 +238,7 @@ class AdvGAN(LightningModule):
         loss_real = self.discriminator_loss_real(imgs)
         loss_fake = self.discriminator_loss_fake(adv_imgs)
 
-        loss_discriminator = (loss_real + loss_fake) / 2
+        loss_discriminator = loss_real + loss_fake
 
         losses = {
             f"{stage}_loss_discriminator": loss_discriminator,
