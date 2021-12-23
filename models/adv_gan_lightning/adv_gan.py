@@ -282,6 +282,25 @@ class AdvGAN(LightningModule):
 
         return losses
 
+    def optimizer_step(
+        self,
+        epoch,
+        batch_idx,
+        optimizer,
+        optimizer_idx,
+        optimizer_closure,
+        on_tpu=False,
+        using_native_amp=False,
+        using_lbfgs=False,
+    ):
+        # update generator twice
+        if optimizer_idx == 0:
+            optimizer.step(closure=optimizer_closure)
+            optimizer.step(closure=optimizer_closure)
+
+        if optimizer_idx == 1:
+            optimizer.step(closure=optimizer_closure)
+
     def configure_optimizers(self):
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
