@@ -15,9 +15,8 @@ class ApeGan(pl.LightningModule):
             xi1=0.7, 
             xi2=0.3, 
             lr=2e-4, 
-            checkpoint_path: str ='last.ckpt', 
             attack=None,
-            target_checkpoint_path=None,
+            target_model_checkpoint_path=None,
             num_batches_to_log = 1,
             num_samples_to_log = 16,
         ):
@@ -26,13 +25,10 @@ class ApeGan(pl.LightningModule):
         self.xi1 = xi1
         self.xi2 = xi2
         self.lr = lr
-        self.checkpoint_path = checkpoint_path
         
         self.generator = Generator(in_ch)
         self.discriminator = Discriminator(in_ch)
-        
-        self.automatic_optimization = False
-
+    
         self.attack = attack
 
         self.loss_bce = nn.BCEWithLogitsLoss()
@@ -41,8 +37,8 @@ class ApeGan(pl.LightningModule):
         self.num_batches_to_log = num_batches_to_log
         self.num_samples_to_log = num_samples_to_log
 
-        if target_checkpoint_path is not None:
-            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_checkpoint_path)
+        if target_model_checkpoint_path is not None:
+            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_checkpoint_path)
             self.target_model.freeze()
             self.target_model.eval()
 
@@ -51,7 +47,7 @@ class ApeGan(pl.LightningModule):
     def forward(self, z):
         return self.generator(z)
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx, optimizer_idx):
         X, X_adv = batch
 
         if self.attack is not None:
@@ -61,41 +57,43 @@ class ApeGan(pl.LightningModule):
         t_real = torch.ones(X.shape[0], device=self.device)
         t_fake = torch.zeros(X.shape[0], device=self.device)
 
-        # Train discriminator
-        opt_d, opt_g = self.optimizers()
-        y_real = self.discriminator(X).squeeze()
-        X_fake = self.generator(X_adv)
-        y_fake = self.discriminator(X_fake).squeeze()
-
-        loss_discriminator = self.loss_bce(y_real, t_real) + self.loss_bce(y_fake, t_fake)
-        
-        opt_d.zero_grad()
-        # retain graph probably wrong
-        self.manual_backward(loss_discriminator, retain_graph=True)
-        opt_d.step()
-
-        # Train generator
-        for _ in range(2):
+        if optimizer_idx == 0:
             X_fake = self.generator(X_adv)
             y_fake = self.discriminator(X_fake).squeeze()
 
             loss_generator = self.xi1 * self.loss_mse(X_fake, X) + self.xi2 * self.loss_bce(y_fake, t_real)
-            
-            opt_g.zero_grad()
-            self.manual_backward(loss_generator, retain_graph=True)
-            opt_g.step()
 
-        losses = {
-            "train_loss_discriminiator": loss_discriminator,
-            "train_loss_generator": loss_generator
-        }
+            losses = {
+                "train_loss_generator": loss_generator
+            }
 
-        self.log_dict(
-            losses,
-            prog_bar=True,
-            on_step=True,
-            on_epoch=True
-        )
+            self.log_dict(
+                losses,
+                prog_bar=True,
+                on_step=True,
+                on_epoch=True
+            )
+
+            return loss_generator
+        elif optimizer_idx == 1:
+            y_real = self.discriminator(X).squeeze()
+            X_fake = self.generator(X_adv)
+            y_fake = self.discriminator(X_fake).squeeze()
+
+            loss_discriminator = self.loss_bce(y_real, t_real) + self.loss_bce(y_fake, t_fake)
+
+            losses = {
+                "train_loss_discriminiator": loss_discriminator,
+            }
+
+            self.log_dict(
+                losses,
+                prog_bar=True,
+                on_step=True,
+                on_epoch=True
+            )
+
+            return loss_discriminator
 
     def validation_step(self, batch, batch_idx):
         X, X_adv = batch            
@@ -185,10 +183,28 @@ class ApeGan(pl.LightningModule):
             ],
         })
 
-    def configure_optimizers(self):
-        lr = self.lr
+    def optimizer_step(
+        self,
+        epoch,
+        batch_idx,
+        optimizer,
+        optimizer_idx,
+        optimizer_closure,
+        on_tpu=False,
+        using_native_amp=False,
+        using_lbfgs=False,
+    ):
+        # update generator every step
+        if optimizer_idx == 0:
+            optimizer.step(closure=optimizer_closure)
+            optimizer.step(closure=optimizer_closure)
+
+        # update discriminator every 2 steps
+        if optimizer_idx == 1:
+            optimizer.step(closure=optimizer_closure)
+
+    def configure_optimizers(self):        
+        opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr, betas=(0.5, 0.999))
+        opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(0.5, 0.999))
         
-        opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr, betas=(0.5, 0.999))
-        opt_g = torch.optim.Adam(self.generator.parameters(), lr=lr, betas=(0.5, 0.999))
-        
-        return opt_d, opt_g
+        return [opt_g, opt_d], []

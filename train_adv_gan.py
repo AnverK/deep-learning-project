@@ -9,6 +9,8 @@ import os
 os.environ['WANDB_SAVE_CODE'] = "true"
 
 from models.adv_gan_lightning.adv_gan import AdvGAN
+from models.adv_gan_lightning.target_model import TargetModel
+
 from config import Config
 
 pl.seed_everything(36)
@@ -20,15 +22,15 @@ dm = MNISTDataModule(
     f'{Config.LOGS_PATH}', 
     batch_size=Config.ADV_GAN_BATCH_SIZE, 
     num_workers=Config.NUM_WORKERS,
-    drop_last=True
 )
 
 model = AdvGAN(
     model_num_labels=10, 
     image_nc=1, 
     box_min=0, 
-    box_max=1, 
-    checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'
+    box_max=1,
+    target_model_checkpoint_path='mnist_challenge/models/secret', 
+    tensorflow=True
 )
 
 wandb_logger = pl_loggers.WandbLogger(

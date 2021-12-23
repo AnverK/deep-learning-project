@@ -1,6 +1,5 @@
 from .discriminator import Discriminator
 from .generator import Generator
-from .target_model import TargetModel
 
 import torch
 import torch.nn as nn
@@ -9,6 +8,12 @@ from pytorch_lightning import LightningModule
 
 from torchmetrics.functional import accuracy
 import wandb
+
+from .target_model import TargetModel
+
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+from mnist_challenge.model import Model
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -29,16 +34,16 @@ class AdvGAN(LightningModule):
             lr: float = 0.001,
             b1: float = 0.5,
             b2: float = 0.999,
-            checkpoint_path: str = "target.ckpt",
             num_batches_to_log = 1,
             num_samples_to_log = 16,
+            target_model_checkpoint_path = 'last.ckpt',
+            tensorflow=False,
             **kwargs
     ):
         super().__init__()
         self.b2 = b2
         self.b1 = b1
         self.lr = lr
-        self.save_hyperparameters()
 
         output_nc = image_nc
         self.model_num_labels = model_num_labels
@@ -54,9 +59,13 @@ class AdvGAN(LightningModule):
         self.generator.apply(weights_init)
         self.discriminator.apply(weights_init)
 
-        self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=checkpoint_path)
-        self.target_model.freeze()
-        self.target_model.eval()
+        self.tensorflow = tensorflow
+        self.target_model_checkpoint_path = target_model_checkpoint_path
+
+        if not self.tensorflow:
+            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_checkpoint_path)
+            self.target_model.freeze()
+            self.target_model.eval()
 
         self.C = 0.1
         # To scale the importance of losses
@@ -121,9 +130,29 @@ class AdvGAN(LightningModule):
             ]
         })
 
+    def target_model_predict(self, imgs, labels):
+        if self.tensorflow:
+            checkpoint = tf.train.latest_checkpoint(self.target_model_checkpoint)
+            target_model = Model()
+            saver = tf.train.Saver()
+
+            with tf.Session() as sess:
+                saver.restore(sess, checkpoint)
+                dict_adv = {
+                    target_model.x_input: imgs.cpu().numpy().transpose(0, 2, 3, 1),
+                    target_model.y_input: labels.cpu().numpy()
+                }
+
+                cur_corr, y_pred_batch = sess.run([target_model.num_correct, target_model.y_pred],
+                                                feed_dict=dict_adv)
+
+                return y_pred_batch
+
+        return self.target_model(imgs)
+
     def target_model_metrics(self, imgs, labels, adv_imgs, stage='validation'):
-        labels_original_pred = self.target_model(imgs).argmax(1)
-        labels_adversarial_pred = self.target_model(adv_imgs).argmax(1)
+        labels_original_pred = self.target_model_predict(imgs, labels).argmax(1)
+        labels_adversarial_pred = self.target_model_predict(adv_imgs, labels).argmax(1)
 
         accuracy_original = accuracy(labels_original_pred, labels)
         accuracy_adversarial = accuracy(labels_adversarial_pred, labels)
@@ -196,7 +225,7 @@ class AdvGAN(LightningModule):
     def adversarial_loss(self, adv_imgs, labels):
         # Loss of fooling the target model:
         # Implementation from https://github.com/mathcbc/advGAN_pytorch
-        preds = self.target_model(adv_imgs)
+        preds = self.target_model_predict(adv_imgs, labels)
         probs = F.softmax(preds, dim=1)
         onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
 
@@ -254,12 +283,8 @@ class AdvGAN(LightningModule):
         return losses
 
     def configure_optimizers(self):
-        lr = self.hparams.lr
-        b1 = self.hparams.b1
-        b2 = self.hparams.b2
-
-        opt_g = torch.optim.Adam(self.generator.parameters(), lr=lr, betas=(b1, b2))
-        opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr, betas=(b1, b2))
+        opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
+        opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
         return [opt_g, opt_d], []
 
     def on_epoch_end(self):
