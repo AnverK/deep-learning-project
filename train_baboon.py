@@ -36,7 +36,7 @@ adv_gan = AdvGAN(
 ape_gan = ApeGan(
     1, 
     Config.APE_GAN_gen_loss_scale, 
-    Config.APE_GAN_gen_loss_scale, 
+    Config.APE_GAN_dis_loss_scale, 
     Config.APE_GAN_lr, 
     attack=adv_gan,
     target_model_checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'

@@ -22,6 +22,7 @@ dm = MNISTDataModule(
     f'{Config.LOGS_PATH}', 
     batch_size=Config.ADV_GAN_BATCH_SIZE, 
     num_workers=Config.NUM_WORKERS,
+    drop_last=True
 )
 
 model = AdvGAN(
@@ -43,7 +44,7 @@ wandb_logger.watch(model)
 
 checkpoint_callback = ModelCheckpoint(
     f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/', 
-    monitor = "validation_loss_generator", 
+    monitor = "validation_accuracy_adversarial", 
     save_top_k = 1, 
     save_last = True, 
     mode='min'

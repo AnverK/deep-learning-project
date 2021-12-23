@@ -31,7 +31,7 @@ attack.eval()
 model = ApeGan(
     1, 
     Config.APE_GAN_gen_loss_scale, 
-    Config.APE_GAN_gen_loss_scale, 
+    Config.APE_GAN_dis_loss_scale, 
     Config.APE_GAN_lr, 
     attack=attack,
     target_model_checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'
@@ -57,7 +57,7 @@ callbacks = [checkpoint_callback]
 
 trainer = Trainer(
     gpus=-1, 
-    max_epochs = 20, 
+    max_epochs = 50, 
     precision = 16, 
     callbacks = callbacks, 
     benchmark=True,

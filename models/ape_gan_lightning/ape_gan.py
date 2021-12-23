@@ -101,12 +101,15 @@ class ApeGan(pl.LightningModule):
         if self.attack is not None:
             y = X_adv.clone()
             
+            """
             if self.current_epoch == 0:
                 X_adv = self.attack(X)
                 self.attack_batches.append(X_adv)
             else:
                 X_adv = self.attack_batches[batch_idx]
-
+            """
+            
+            X_adv = self.attack(X)
             X_res = self.generator(X_adv)
 
             y_original_pred, y_adversarial_pred, y_restored_pred = self.target_model_metrics(X, y, X_adv, X_res)
@@ -114,9 +117,9 @@ class ApeGan(pl.LightningModule):
         t_real = torch.ones(X.shape[0], device=self.device)
         t_fake = torch.zeros(X.shape[0], device=self.device)
 
-        y_real = self.discriminator(X).squeeze()
+        y_real = self.discriminator(X)
         X_fake = self.generator(X_adv)
-        y_fake = self.discriminator(X_fake).squeeze()
+        y_fake = self.discriminator(X_fake)
 
         loss_discriminator = self.loss_bce(y_real, t_real) + self.loss_bce(y_fake, t_fake)
         loss_generator = self.gen_loss_scale * self.loss_mse(X_fake, X) + self.dis_loss_scale * self.loss_bce(y_fake, t_real)
