@@ -29,8 +29,8 @@ model = AdvGAN(
     image_nc=1, 
     box_min=0, 
     box_max=1,
-    target_model_checkpoint_path='mnist_challenge/models/secret', 
-    tensorflow=True
+    target_model_checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt', 
+    tensorflow=False
 )
 
 wandb_logger = pl_loggers.WandbLogger(

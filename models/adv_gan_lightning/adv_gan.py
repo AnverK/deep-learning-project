@@ -132,7 +132,7 @@ class AdvGAN(LightningModule):
 
     def target_model_predict(self, imgs, labels):
         if self.tensorflow:
-            checkpoint = tf.train.latest_checkpoint(self.target_model_checkpoint)
+            checkpoint = tf.train.latest_checkpoint(self.target_model_checkpoint_path)
             target_model = Model()
             saver = tf.train.Saver()
 

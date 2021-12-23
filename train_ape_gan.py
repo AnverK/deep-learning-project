@@ -8,7 +8,7 @@ import os
 
 os.environ['WANDB_SAVE_CODE'] = "true"
 
-from models.ape_gan_lightning.ape_gan_manual import ApeGan
+from models.ape_gan_lightning.ape_gan import ApeGan
 from models.adv_gan_lightning.adv_gan import AdvGAN
 from config import Config
 
@@ -30,8 +30,8 @@ attack.eval()
 
 model = ApeGan(
     1, 
-    Config.APE_GAN_xi1, 
-    Config.APE_GAN_xi2, 
+    Config.APE_GAN_gen_loss_scale, 
+    Config.APE_GAN_gen_loss_scale, 
     Config.APE_GAN_lr, 
     attack=attack,
     target_model_checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'

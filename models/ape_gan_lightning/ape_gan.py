@@ -12,8 +12,8 @@ class ApeGan(pl.LightningModule):
     def __init__(
             self, 
             in_ch=1, 
-            xi1=0.7, 
-            xi2=0.3, 
+            gen_loss_scale=0.7, 
+            dis_loss_scale=0.3, 
             lr=2e-4, 
             attack=None,
             target_model_checkpoint_path=None,
@@ -22,8 +22,8 @@ class ApeGan(pl.LightningModule):
         ):
         super().__init__()
         
-        self.xi1 = xi1
-        self.xi2 = xi2
+        self.gen_loss_scale = gen_loss_scale
+        self.dis_loss_scale = dis_loss_scale
         self.lr = lr
         
         self.generator = Generator(in_ch)
@@ -59,9 +59,9 @@ class ApeGan(pl.LightningModule):
 
         if optimizer_idx == 0:
             X_fake = self.generator(X_adv)
-            y_fake = self.discriminator(X_fake).squeeze()
+            y_fake = self.discriminator(X_fake)
 
-            loss_generator = self.xi1 * self.loss_mse(X_fake, X) + self.xi2 * self.loss_bce(y_fake, t_real)
+            loss_generator = self.gen_loss_scale * self.loss_mse(X_fake, X) + self.dis_loss_scale * self.loss_bce(y_fake, t_real)
 
             losses = {
                 "train_loss_generator": loss_generator
@@ -76,9 +76,9 @@ class ApeGan(pl.LightningModule):
 
             return loss_generator
         elif optimizer_idx == 1:
-            y_real = self.discriminator(X).squeeze()
+            y_real = self.discriminator(X)
             X_fake = self.generator(X_adv)
-            y_fake = self.discriminator(X_fake).squeeze()
+            y_fake = self.discriminator(X_fake)
 
             loss_discriminator = self.loss_bce(y_real, t_real) + self.loss_bce(y_fake, t_fake)
 
@@ -119,7 +119,7 @@ class ApeGan(pl.LightningModule):
         y_fake = self.discriminator(X_fake).squeeze()
 
         loss_discriminator = self.loss_bce(y_real, t_real) + self.loss_bce(y_fake, t_fake)
-        loss_generator = self.xi1 * self.loss_mse(X_fake, X) + self.xi2 * self.loss_bce(y_fake, t_real)
+        loss_generator = self.gen_loss_scale * self.loss_mse(X_fake, X) + self.dis_loss_scale * self.loss_bce(y_fake, t_real)
 
         losses = {
             "validation_loss_discriminiator": loss_discriminator,
@@ -194,12 +194,11 @@ class ApeGan(pl.LightningModule):
         using_native_amp=False,
         using_lbfgs=False,
     ):
-        # update generator every step
+        # update generator twice
         if optimizer_idx == 0:
             optimizer.step(closure=optimizer_closure)
             optimizer.step(closure=optimizer_closure)
 
-        # update discriminator every 2 steps
         if optimizer_idx == 1:
             optimizer.step(closure=optimizer_closure)
 
