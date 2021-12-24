@@ -12,4 +12,4 @@ dm = MNISTDataModule('.', batch_size=BATCH_SIZE)  # if I set num_workers I get a
 model = TargetModel()
 trainer = Trainer(gpus=AVAIL_GPUS, max_epochs=40, progress_bar_refresh_rate=20)
 trainer.fit(model, dm)
-trainer.save_checkpoint("target.ckpt")
+trainer.save_checkpoint("last.ckpt")

@@ -92,7 +92,7 @@ class Discriminator(nn.Module):
         h = F.leaky_relu(self.conv1(x))
         h = F.leaky_relu(self.bn2(self.conv2(h)))
         h = F.leaky_relu(self.bn3(self.conv3(h)))
-        #h = torch.sigmoid(self.fc4(h.view(h.size(0), -1)))
+        # h = torch.sigmoid(self.fc4(h.view(h.size(0), -1)))
         h = self.fc4(h.view(h.size(0), -1)).squeeze()
 
         return h

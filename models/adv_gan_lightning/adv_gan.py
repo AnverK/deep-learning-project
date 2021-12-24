@@ -1,5 +1,6 @@
 from .discriminator import Discriminator
 from .generator import Generator
+from .target_model import TargetModel
 
 import torch
 import torch.nn as nn
@@ -9,11 +10,12 @@ from pytorch_lightning import LightningModule
 from torchmetrics.functional import accuracy
 import wandb
 
-from .target_model import TargetModel
+from mnist_challenge.model import Model
 
 import tensorflow.compat.v1 as tf
+
 tf.disable_v2_behavior()
-from mnist_challenge.model import Model
+
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -34,10 +36,10 @@ class AdvGAN(LightningModule):
             lr: float = 0.001,
             b1: float = 0.5,
             b2: float = 0.999,
-            num_batches_to_log = 1,
-            num_samples_to_log = 16,
-            target_model_checkpoint_path = 'last.ckpt',
-            tensorflow=False,
+            num_batches_to_log=1,
+            num_samples_to_log=16,
+            robust_target_model_dir='../models/natural',
+            target_model_dir='last.ckpt',
             **kwargs
     ):
         super().__init__()
@@ -59,11 +61,21 @@ class AdvGAN(LightningModule):
         self.generator.apply(weights_init)
         self.discriminator.apply(weights_init)
 
-        self.tensorflow = tensorflow
-        self.target_model_checkpoint_path = target_model_checkpoint_path
+        # self.model = TargetModel.load_from_checkpoint(checkpoint_path="last.ckpt")
+
+        self.target_model = Model()
+        self.sess = tf.Session(config=tf.ConfigProto(
+            device_count={'GPU': 0}
+        ))
+        model_file = tf.train.latest_checkpoint(robust_target_model_dir)
+
+        saver = tf.train.Saver()
+        saver.restore(self.sess, model_file)
+
+        self.target_model_checkpoint_path = target_model_dir
 
         if not self.tensorflow:
-            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_checkpoint_path)
+            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_dir)
             self.target_model.freeze()
             self.target_model.eval()
 
@@ -88,13 +100,19 @@ class AdvGAN(LightningModule):
 
         if optimizer_idx == 0:
             losses = self.generator_losses(labels, adv_imgs, perturbation, 'train')
-            
+
             return losses["train_loss_generator"]
 
         if optimizer_idx == 1:
             losses = self.discriminator_loss(imgs, adv_imgs, 'train')
-            
+
             return losses["train_loss_discriminator"]
+
+    def on_epoch_end(self):
+        if self.current_epoch == 50:
+            self.lr = 0.0001
+        if self.current_epoch == 80:
+            self.lr = 0.00001
 
     def validation_step(self, batch, batch_idx):
         imgs, labels = batch
@@ -107,46 +125,42 @@ class AdvGAN(LightningModule):
         return imgs, labels, perturbation, adv_imgs, labels_original_pred, labels_adversarial_pred
 
     def validation_epoch_end(self, outputs):
-        imgs_batches, labels_batches, perturbation_batches, adv_imgs_batches, labels_original_pred_batches, labels_adversarial_pred_batches = [torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in range(len(outputs[0]))]
+        imgs_batches, labels_batches, perturbation_batches, adv_imgs_batches, labels_original_pred_batches, labels_adversarial_pred_batches = [
+            torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in
+            range(len(outputs[0]))]
 
         wandb.log({
             "pred_imgs": [
                 wandb.Image(
                     img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, labels_original_pred_batches) for img, label, pred in zip(imgs, labels, preds)
+                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, labels_original_pred_batches) for
+                img, label, pred in zip(imgs, labels, preds)
             ] if self.current_epoch == 0 else None,
             "pred_adv_imgs": [
                 wandb.Image(
                     adv_img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, labels_adversarial_pred_batches) for adv_img, label, pred in zip(adv_imgs, labels, preds)
+                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, labels_adversarial_pred_batches)
+                for adv_img, label, pred in zip(adv_imgs, labels, preds)
             ],
             "perturbation": [
                 wandb.Image(
                     perturbation,
                     caption=f'Label: {label}'
-                ) for labels, perturbations in zip(labels_batches, perturbation_batches) for label, perturbation in zip(labels, perturbations)
+                ) for labels, perturbations in zip(labels_batches, perturbation_batches) for label, perturbation in
+                zip(labels, perturbations)
             ]
         })
 
     def target_model_predict(self, imgs, labels):
         if self.tensorflow:
-            checkpoint = tf.train.latest_checkpoint(self.target_model_checkpoint_path)
-            target_model = Model()
-            saver = tf.train.Saver()
+            np_tensor = imgs.data.cpu().numpy()
+            np_tensor = np_tensor.reshape(np_tensor.shape[0], -1)
 
-            with tf.Session() as sess:
-                saver.restore(sess, checkpoint)
-                dict_adv = {
-                    target_model.x_input: imgs.cpu().numpy().transpose(0, 2, 3, 1),
-                    target_model.y_input: labels.cpu().numpy()
-                }
-
-                cur_corr, y_pred_batch = sess.run([target_model.num_correct, target_model.y_pred],
-                                                feed_dict=dict_adv)
-
-                return y_pred_batch
+            logits = self.target_model.pre_softmax.eval(session=self.sess,
+                                                        feed_dict={self.target_model.x_input: np_tensor})
+            return torch.from_numpy(logits)
 
         return self.target_model(imgs)
 
@@ -187,7 +201,8 @@ class AdvGAN(LightningModule):
         # Implementation from https://github.com/mathcbc/advGAN_pytorch
         # lossG = self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
         # My implementation
-        loss_generator = (self.adv_lambda * loss_adv) + (self.gen_lambda * loss_generator_fake) + (self.pert_lambda * loss_perturb)
+        loss_generator = (self.adv_lambda * loss_adv) + (self.gen_lambda * loss_generator_fake) + (
+                self.pert_lambda * loss_perturb)
 
         losses = {
             f"{stage}_loss_generator_fake": loss_generator_fake,
@@ -203,8 +218,7 @@ class AdvGAN(LightningModule):
             on_epoch=True
         )
 
-        return losses 
-
+        return losses
 
     def generator_loss_fake(self, adv_imgs):
         pred_fake = self.discriminator(adv_imgs)
@@ -215,12 +229,13 @@ class AdvGAN(LightningModule):
 
     # Soft hinge loss to bound the magnitude of the perturbation
     def perturbation_loss(self, perturbation):
-        return F.mse_loss(perturbation, torch.zeros_like(perturbation, device=self.device))
-
+        """
         norm_perturb = torch.norm(perturbation, 2, dim=1)
         loss_perturb = torch.mean(torch.max(norm_perturb - self.C, torch.zeros(1, device=self.device)))
 
         return loss_perturb
+        """
+        return F.mse_loss(perturbation, torch.zeros_like(perturbation, device=self.device))
 
     def adversarial_loss(self, adv_imgs, labels):
         # Loss of fooling the target model:
@@ -250,8 +265,8 @@ class AdvGAN(LightningModule):
     def discriminator_loss_real(self, imgs):
         pred_real = self.discriminator(imgs)
         valid = torch.ones_like(pred_real, device=self.device)
-        lossD_real = F.binary_cross_entropy_with_logits(pred_real, valid) 
-        #lossD_real = F.mse_loss(pred_real, valid) # why mse instead of bce?
+        lossD_real = F.binary_cross_entropy_with_logits(pred_real, valid)
+        # lossD_real = F.mse_loss(pred_real, valid) # why mse instead of bce?
 
         return lossD_real
 
@@ -259,7 +274,7 @@ class AdvGAN(LightningModule):
         pred_fake = self.discriminator(adv_imgs)
         fake = torch.zeros_like(pred_fake, device=self.device)
         lossD_fake = F.binary_cross_entropy_with_logits(pred_fake, fake)
-        #lossD_real = F.mse_loss(pred_fake, fake)
+        # lossD_real = F.mse_loss(pred_fake, fake)
 
         return lossD_fake
 
@@ -283,15 +298,15 @@ class AdvGAN(LightningModule):
         return losses
 
     def optimizer_step(
-        self,
-        epoch,
-        batch_idx,
-        optimizer,
-        optimizer_idx,
-        optimizer_closure,
-        on_tpu=False,
-        using_native_amp=False,
-        using_lbfgs=False,
+            self,
+            epoch,
+            batch_idx,
+            optimizer,
+            optimizer_idx,
+            optimizer_closure,
+            on_tpu=False,
+            using_native_amp=False,
+            using_lbfgs=False,
     ):
         # update generator twice
         if optimizer_idx == 0:
@@ -305,9 +320,3 @@ class AdvGAN(LightningModule):
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
         return [opt_g, opt_d], []
-
-    def on_epoch_end(self):
-        if self.current_epoch == 50:
-            self.lr = 0.0001
-        if self.current_epoch == 80:
-            self.lr = 0.00001

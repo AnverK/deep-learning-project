@@ -16,7 +16,7 @@ class ApeGan(pl.LightningModule):
             dis_loss_scale=0.3, 
             lr=2e-4, 
             attack=None,
-            target_model_checkpoint_path=None,
+            target_model_dir=None,
             num_batches_to_log = 1,
             num_samples_to_log = 16,
         ):
@@ -37,8 +37,8 @@ class ApeGan(pl.LightningModule):
         self.num_batches_to_log = num_batches_to_log
         self.num_samples_to_log = num_samples_to_log
 
-        if target_model_checkpoint_path is not None:
-            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_checkpoint_path)
+        if target_model_dir is not None:
+            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_dir)
             self.target_model.freeze()
             self.target_model.eval()
 

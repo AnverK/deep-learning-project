@@ -8,27 +8,28 @@ from ..adv_gan_lightning.target_model import TargetModel
 from torchmetrics.functional import accuracy
 import wandb
 
+
 class ApeGan(pl.LightningModule):
     def __init__(
-            self, 
-            in_ch=1, 
-            xi1=0.7, 
-            xi2=0.3, 
-            lr=2e-4, 
+            self,
+            in_ch=1,
+            xi1=0.7,
+            xi2=0.3,
+            lr=2e-4,
             attack=None,
             target_model_checkpoint_path=None,
-            num_batches_to_log = 1,
-            num_samples_to_log = 16,
-        ):
+            num_batches_to_log=1,
+            num_samples_to_log=16,
+    ):
         super().__init__()
-        
+
         self.xi1 = xi1
         self.xi2 = xi2
         self.lr = lr
-        
+
         self.generator = Generator(in_ch)
         self.discriminator = Discriminator(in_ch)
-        
+
         self.automatic_optimization = False
 
         self.attack = attack
@@ -66,7 +67,7 @@ class ApeGan(pl.LightningModule):
         y_fake = self.discriminator(X_fake)
 
         loss_discriminator = self.loss_bce(y_real, t_real) + self.loss_bce(y_fake, t_fake)
-        
+
         opt_d.zero_grad()
         # retain graph probably wrong
         self.manual_backward(loss_discriminator, retain_graph=True)
@@ -78,7 +79,7 @@ class ApeGan(pl.LightningModule):
             y_fake = self.discriminator(X_fake)
 
             loss_generator = self.xi1 * self.loss_mse(X_fake, X) + self.xi2 * self.loss_bce(y_fake, t_real)
-            
+
             opt_g.zero_grad()
             self.manual_backward(loss_generator, retain_graph=True)
             opt_g.step()
@@ -96,11 +97,11 @@ class ApeGan(pl.LightningModule):
         )
 
     def validation_step(self, batch, batch_idx):
-        X, X_adv = batch            
+        X, X_adv = batch
 
         if self.attack is not None:
             y = X_adv.clone()
-            
+
             if self.current_epoch == 0:
                 X_adv = self.attack(X)
                 self.attack_batches.append(X_adv)
@@ -160,31 +161,36 @@ class ApeGan(pl.LightningModule):
         return y_original_pred, y_adversarial_pred, y_restored_pred
 
     def validation_epoch_end(self, outputs):
-        imgs_batches, labels_batches, adv_imgs_batches, res_imgs_batches, y_original_pred, y_adversarial_pred, y_restored_pred = [torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in range(len(outputs[0]))]
+        imgs_batches, labels_batches, adv_imgs_batches, res_imgs_batches, y_original_pred, y_adversarial_pred, y_restored_pred = [
+            torch.stack([output[i] for output in outputs])[:self.num_batches_to_log, :self.num_samples_to_log] for i in
+            range(len(outputs[0]))]
 
         wandb.log({
             "original_imgs": [
                 wandb.Image(
                     img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, y_original_pred) for img, pred, label in zip(imgs, labels, preds)
+                ) for imgs, labels, preds in zip(imgs_batches, labels_batches, y_original_pred) for img, pred, label in
+                zip(imgs, labels, preds)
             ] if self.current_epoch == 0 else None,
             "attack_imgs": [
                 wandb.Image(
                     adv_img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, y_adversarial_pred) for adv_img, pred, label in zip(adv_imgs, labels, preds)
+                ) for adv_imgs, labels, preds in zip(adv_imgs_batches, labels_batches, y_adversarial_pred) for
+                adv_img, pred, label in zip(adv_imgs, labels, preds)
             ] if self.current_epoch == 0 else None,
             "restored_imgs": [
                 wandb.Image(
                     res_img,
                     caption=f'Pred: {pred}, Label: {label}'
-                ) for res_imgs, labels, preds in zip(res_imgs_batches, labels_batches, y_restored_pred) for res_img, pred, label in zip(res_imgs, labels, preds)
+                ) for res_imgs, labels, preds in zip(res_imgs_batches, labels_batches, y_restored_pred) for
+                res_img, pred, label in zip(res_imgs, labels, preds)
             ],
         })
 
-    def configure_optimizers(self):        
+    def configure_optimizers(self):
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr, betas=(0.5, 0.999))
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(0.5, 0.999))
-        
+
         return [opt_g, opt_d], []
