@@ -1,12 +1,15 @@
 from discriminator import Discriminator
 from generator import Generator
-from targetModel import TargetModel
 
 from collections import OrderedDict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_lightning import LightningModule
+import tensorflow.compat.v1 as tf
+
+tf.disable_v2_behavior()
+from robust_model import Model
 
 
 # custom weights initialization called on generator and discriminator
@@ -29,6 +32,7 @@ class AdvGAN(LightningModule):
             lr: float = 0.001,
             b1: float = 0.5,
             b2: float = 0.999,
+            target_model_dir='../models/natural',
             **kwargs
     ):
         super().__init__()
@@ -54,7 +58,16 @@ class AdvGAN(LightningModule):
         self.generator.apply(weights_init)
         self.discriminator.apply(weights_init)
 
-        self.model = TargetModel.load_from_checkpoint(checkpoint_path="target.ckpt")
+        # self.model = TargetModel.load_from_checkpoint(checkpoint_path="target.ckpt")
+
+        self.model = Model()
+        self.sess = tf.Session(config=tf.ConfigProto(
+            device_count={'GPU': 0}
+        ))
+        model_file = tf.train.latest_checkpoint(target_model_dir)
+
+        saver = tf.train.Saver()
+        saver.restore(self.sess, model_file)
 
     def forward(self, z):
         return self.generator(z)
@@ -89,8 +102,9 @@ class AdvGAN(LightningModule):
             # loss_perturb = torch.max(loss_perturb - C, torch.zeros(1, device=self.device))
 
             # cal adv loss
-            preds = self.model(adv_images)
-            probs = F.softmax(preds, dim=1)
+            # preds = self.model(adv_images)
+            logits = self.target_model_logits(adv_images)
+            probs = F.softmax(logits, dim=1)
             onehot_labels = torch.eye(self.model_num_labels)[labels]
             onehot_labels = onehot_labels.type_as(onehot_labels)
             # C&W loss function
@@ -105,7 +119,7 @@ class AdvGAN(LightningModule):
             pert_lambda = 1
             lossG = adv_lambda * lossG_fake + loss_adv + pert_lambda * loss_perturb
             self.log("Generator loss Overall", lossG)
-            tqdm_dict = {"lossG": self.lossG}
+            tqdm_dict = {"lossG": lossG}
             output = OrderedDict({"loss": lossG, "progress_bar": tqdm_dict, "log": tqdm_dict})
             return output
 
@@ -142,3 +156,15 @@ class AdvGAN(LightningModule):
             self.lr = 0.0001
         if self.current_epoch == 80:
             self.lr = 0.00001
+
+    def target_model_logits(self, X):
+        np_tensor = X.data.cpu().numpy()
+        np_tensor = np_tensor.reshape(np_tensor.shape[0], -1)
+
+        logits = self.model.pre_softmax.eval(session=self.sess,
+                                             feed_dict={self.model.x_input: np_tensor})
+        return torch.from_numpy(logits)
+
+    def target_model_predictions(self, X):
+        logits = self.target_model_logits(X)
+        return torch.argmax(logits, dim=1)

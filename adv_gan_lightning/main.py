@@ -1,4 +1,4 @@
-from advGan import AdvGAN
+from adv_gan import AdvGAN
 
 from pl_bolts.datamodules import MNISTDataModule
 from pytorch_lightning import Trainer
