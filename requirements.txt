@@ -1,0 +1,8 @@
+pytorch-lightning
+lightning-bolts
+wandb~=0.12.9
+torchvision~=0.11.1
+torch~=1.10.0
+torchmetrics~=0.6.0
+tqdm~=4.62.3
+numpy~=1.21.4
