@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class Discriminator(nn.Module):
     def __init__(self, image_shape):
         super(Discriminator, self).__init__()
@@ -17,11 +18,12 @@ class Discriminator(nn.Module):
             nn.BatchNorm2d(32),
             nn.LeakyReLU(0.2),
             nn.Conv2d(32, 1, 1),
-            #nn.Sigmoid()
+            # nn.Sigmoid()
             # 32*1*1
         ]
         self.model = nn.Sequential(*model)
 
     def forward(self, x):
+        logits = self.model(x)
         output = self.model(x).squeeze()
-        return output
+        return logits, output

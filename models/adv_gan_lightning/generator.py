@@ -1,5 +1,6 @@
 import torch.nn as nn
 
+
 class Generator(nn.Module):
     def __init__(self,
                  latent_dim,
@@ -24,9 +25,9 @@ class Generator(nn.Module):
         ]
 
         bottle_neck_lis = [ResnetBlock(32),
-                       ResnetBlock(32),
-                       ResnetBlock(32),
-                       ResnetBlock(32),]
+                           ResnetBlock(32),
+                           ResnetBlock(32),
+                           ResnetBlock(32), ]
 
         decoder_lis = [
             nn.ConvTranspose2d(32, 16, kernel_size=3, stride=2, padding=0, bias=False),

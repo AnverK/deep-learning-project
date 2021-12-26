@@ -1,6 +1,7 @@
 from .discriminator import Discriminator
 from .generator import Generator
 from .target_model import TargetModel
+from .robust_model import Model
 
 import torch
 import torch.nn as nn
@@ -9,8 +10,6 @@ from pytorch_lightning import LightningModule
 
 from torchmetrics.functional import accuracy
 import wandb
-
-from mnist_challenge.model import Model
 
 import tensorflow.compat.v1 as tf
 
@@ -38,9 +37,10 @@ class AdvGAN(LightningModule):
             b2: float = 0.999,
             num_batches_to_log=1,
             num_samples_to_log=16,
+            is_relativistic=True,
+            tensorflow=True,
             robust_target_model_dir='../../mnist_challenge/models/adv_trained/',
             target_model_dir='last.ckpt',
-            tensorflow=True,
             **kwargs
     ):
         super().__init__()
@@ -56,11 +56,12 @@ class AdvGAN(LightningModule):
         self.lr = lr
         self.num_batches_to_log = num_batches_to_log
         self.num_samples_to_log = num_samples_to_log
+        self.is_relativistic = is_relativistic
         self.tensorflow = tensorflow
 
         # networks
-        self.generator = Generator(self.gen_input_nc, image_nc)
-        self.discriminator = Discriminator(image_nc)
+        self.generator = Generator(self.gen_input_nc, image_nc).to(self.device)
+        self.discriminator = Discriminator(image_nc).to(self.device)
 
         self.generator.apply(weights_init)
         self.discriminator.apply(weights_init)
@@ -98,7 +99,7 @@ class AdvGAN(LightningModule):
         perturbation, adv_imgs = self.generate_adv_imgs(imgs)
 
         if optimizer_idx == 0:
-            losses = self.generator_losses(labels, adv_imgs, perturbation, 'train')
+            losses = self.generator_losses(imgs, labels, adv_imgs, perturbation, 'train')
 
             return losses["train_loss_generator"]
 
@@ -117,7 +118,7 @@ class AdvGAN(LightningModule):
         imgs, labels = batch
 
         perturbation, adv_imgs = self.generate_adv_imgs(imgs)
-        losses = self.generator_losses(labels, adv_imgs, perturbation, 'validation')
+        losses = self.generator_losses(imgs, labels, adv_imgs, perturbation, 'validation')
 
         labels_original_pred, labels_adversarial_pred = self.target_model_metrics(imgs, labels, adv_imgs)
 
@@ -192,22 +193,25 @@ class AdvGAN(LightningModule):
 
         return perturbation, adv_imgs
 
-    def generator_losses(self, labels, adv_imgs, perturbation, stage='train'):
-        loss_generator_fake = self.generator_loss_fake(adv_imgs)
+    def generator_losses(self, imgs, labels, adv_imgs, perturbation, stage='train'):
+        if self.is_relativistic:
+            loss_generator = self.generator_loss_relativistic(imgs, adv_imgs)
+        else:
+            loss_generator = self.generator_loss_fake(adv_imgs)
         loss_perturb = self.perturbation_loss(perturbation)
         loss_adv = self.adversarial_loss(adv_imgs, labels)
 
         # Implementation from https://github.com/mathcbc/advGAN_pytorch
         # lossG = self.adv_lambda * loss_adv + self.pert_lambda * loss_perturb
         # My implementation
-        loss_generator = (self.adv_lambda * loss_adv) + (self.gen_lambda * loss_generator_fake) + (
+        sum_loss_generator = (self.adv_lambda * loss_adv) + (self.gen_lambda * loss_generator) + (
                 self.pert_lambda * loss_perturb)
 
         losses = {
-            f"{stage}_loss_generator_fake": loss_generator_fake,
+            f"{stage}_loss_generator_fake": loss_generator,
             f"{stage}_loss_perturb": loss_perturb,
             f"{stage}_loss_adv": loss_adv,
-            f"{stage}_loss_generator": loss_generator,
+            f"{stage}_loss_generator": sum_loss_generator,
         }
 
         self.log_dict(
@@ -219,8 +223,21 @@ class AdvGAN(LightningModule):
 
         return losses
 
+    def generator_loss_relativistic(self, imgs, adv_imgs):
+        logits_real, pred_real = self.discriminator(imgs)
+        logits_fake, _ = self.discriminator(adv_imgs)
+
+        real = torch.ones_like(pred_real, device=self.device)
+
+        lossG_real = torch.mean((logits_real - torch.mean(logits_fake) + real)**2)
+        lossG_fake = torch.mean((logits_fake - torch.mean(logits_real) - real)**2)
+
+        lossG = (lossG_real + lossG_fake) / 2
+
+        return lossG
+
     def generator_loss_fake(self, adv_imgs):
-        pred_fake = self.discriminator(adv_imgs)
+        _, pred_fake = self.discriminator(adv_imgs)
         valid = torch.ones_like(pred_fake, device=self.device)
         lossG_fake = F.binary_cross_entropy_with_logits(pred_fake, valid)
 
@@ -237,13 +254,10 @@ class AdvGAN(LightningModule):
         return loss_hinge
 
     def adversarial_loss(self, adv_imgs, labels):
-        # Loss of fooling the target model:
-        # Implementation from https://github.com/mathcbc/advGAN_pytorch
+        # Loss of fooling the target model C&W loss function:
         preds = self.target_model_predict(adv_imgs, labels).to(self.device)
         probs = F.softmax(preds, dim=1)
         onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
-
-        # C&W loss function
 
         # Probabilities of ground truth
         real = onehot_labels * probs
@@ -251,37 +265,41 @@ class AdvGAN(LightningModule):
 
         # Probabilities of the remaining classes
         # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
-        other = (1 - onehot_labels) * probs - onehot_labels * 10000
+        other = (1 - onehot_labels) * probs
         other, _ = torch.max(other, dim=1)
 
         zeros = torch.zeros_like(other)
 
         loss_adv = torch.max(real - other, zeros)
-        loss_adv = torch.sum(loss_adv)
+        loss_adv = torch.mean(loss_adv)
 
         return loss_adv
 
-    def discriminator_loss_real(self, imgs):
-        pred_real = self.discriminator(imgs)
-        valid = torch.ones_like(pred_real, device=self.device)
-        lossD_real = F.binary_cross_entropy_with_logits(pred_real, valid)
-        # lossD_real = F.mse_loss(pred_real, valid) # why mse instead of bce?
+    def discriminator_loss_real_fake(self, imgs, adv_imgs):
+        logits_real, pred_real = self.discriminator(imgs)
+        logits_fake, pred_fake = self.discriminator(adv_imgs)
 
-        return lossD_real
-
-    def discriminator_loss_fake(self, adv_imgs):
-        pred_fake = self.discriminator(adv_imgs)
+        real = torch.ones_like(pred_real, device=self.device)
         fake = torch.zeros_like(pred_fake, device=self.device)
-        lossD_fake = F.binary_cross_entropy_with_logits(pred_fake, fake)
-        # lossD_real = F.mse_loss(pred_fake, fake)
 
-        return lossD_fake
+        if self.is_relativistic:
+            lossD_real = torch.mean((logits_real - torch.mean(logits_fake) - real) ** 2)
+            lossD_fake = torch.mean((logits_fake - torch.mean(logits_real) + real) ** 2)
+        else:
+            lossD_real = F.binary_cross_entropy_with_logits(pred_real, real)
+            lossD_fake = F.binary_cross_entropy_with_logits(pred_fake, fake)
+            # lossD_real = F.mse_loss(pred_real, valid) # why mse instead of bce?
+            # lossD_real = F.mse_loss(pred_fake, fake)
+
+        return lossD_real, lossD_fake
 
     def discriminator_loss(self, imgs, adv_imgs, stage='train'):
-        loss_real = self.discriminator_loss_real(imgs)
-        loss_fake = self.discriminator_loss_fake(adv_imgs)
+        loss_real, loss_fake = self.discriminator_loss_real_fake(imgs, adv_imgs)
 
-        loss_discriminator = loss_real + loss_fake
+        if self.is_relativistic:
+            loss_discriminator = (loss_real + loss_fake) / 2
+        else:
+            loss_discriminator = loss_real + loss_fake
 
         losses = {
             f"{stage}_loss_discriminator": loss_discriminator,
