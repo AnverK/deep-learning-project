@@ -1,4 +1,4 @@
-from targetModel import TargetModel
+from target_model import TargetModel
 
 from pl_bolts.datamodules import MNISTDataModule
 from pytorch_lightning import Trainer

@@ -30,8 +30,9 @@ model = AdvGAN(
     image_nc=1,
     box_min=0,
     box_max=1,
+    robust_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/natural',
     target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt',
-    tensorflow=False
+    tensorflow=True
 )
 
 wandb_logger = pl_loggers.WandbLogger(

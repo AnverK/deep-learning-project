@@ -38,14 +38,12 @@ class AdvGAN(LightningModule):
             b2: float = 0.999,
             num_batches_to_log=1,
             num_samples_to_log=16,
-            robust_target_model_dir='../models/natural',
+            robust_target_model_dir='../../mnist_challenge/models/adv_trained/',
             target_model_dir='last.ckpt',
+            tensorflow=True,
             **kwargs
     ):
         super().__init__()
-        self.b2 = b2
-        self.b1 = b1
-        self.lr = lr
 
         output_nc = image_nc
         self.model_num_labels = model_num_labels
@@ -53,6 +51,12 @@ class AdvGAN(LightningModule):
         self.output_nc = output_nc
         self.box_min = box_min
         self.box_max = box_max
+        self.b2 = b2
+        self.b1 = b1
+        self.lr = lr
+        self.num_batches_to_log = num_batches_to_log
+        self.num_samples_to_log = num_samples_to_log
+        self.tensorflow = tensorflow
 
         # networks
         self.generator = Generator(self.gen_input_nc, image_nc)
@@ -72,8 +76,6 @@ class AdvGAN(LightningModule):
         saver = tf.train.Saver()
         saver.restore(self.sess, model_file)
 
-        self.target_model_checkpoint_path = target_model_dir
-
         if not self.tensorflow:
             self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_dir)
             self.target_model.freeze()
@@ -84,9 +86,6 @@ class AdvGAN(LightningModule):
         self.gen_lambda = 1
         self.adv_lambda = 10
         self.pert_lambda = 1
-
-        self.num_batches_to_log = num_batches_to_log
-        self.num_samples_to_log = num_samples_to_log
 
     def forward(self, z):
         perturbations, adv_imgs = self.generate_adv_imgs(z)
@@ -165,8 +164,8 @@ class AdvGAN(LightningModule):
         return self.target_model(imgs)
 
     def target_model_metrics(self, imgs, labels, adv_imgs, stage='validation'):
-        labels_original_pred = self.target_model_predict(imgs, labels).argmax(1)
-        labels_adversarial_pred = self.target_model_predict(adv_imgs, labels).argmax(1)
+        labels_original_pred = self.target_model_predict(imgs, labels).to(self.device).argmax(1)
+        labels_adversarial_pred = self.target_model_predict(adv_imgs, labels).to(self.device).argmax(1)
 
         accuracy_original = accuracy(labels_original_pred, labels)
         accuracy_adversarial = accuracy(labels_adversarial_pred, labels)
@@ -230,17 +229,17 @@ class AdvGAN(LightningModule):
     # Soft hinge loss to bound the magnitude of the perturbation
     def perturbation_loss(self, perturbation):
         """
-        norm_perturb = torch.norm(perturbation, 2, dim=1)
-        loss_perturb = torch.mean(torch.max(norm_perturb - self.C, torch.zeros(1, device=self.device)))
-
-        return loss_perturb
-        """
         return F.mse_loss(perturbation, torch.zeros_like(perturbation, device=self.device))
+        """
+        perturbation_norm = torch.mean(torch.norm(perturbation.view(perturbation.shape[0], -1), 2, dim=1))
+        loss_hinge = torch.max(torch.zeros(1, device=self.device), perturbation_norm - self.C)
+
+        return loss_hinge
 
     def adversarial_loss(self, adv_imgs, labels):
         # Loss of fooling the target model:
         # Implementation from https://github.com/mathcbc/advGAN_pytorch
-        preds = self.target_model_predict(adv_imgs, labels)
+        preds = self.target_model_predict(adv_imgs, labels).to(self.device)
         probs = F.softmax(preds, dim=1)
         onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
 
@@ -252,7 +251,7 @@ class AdvGAN(LightningModule):
 
         # Probabilities of the remaining classes
         # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
-        other = (1 - onehot_labels) * probs
+        other = (1 - onehot_labels) * probs - onehot_labels * 10000
         other, _ = torch.max(other, dim=1)
 
         zeros = torch.zeros_like(other)
