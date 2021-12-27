@@ -117,7 +117,7 @@ class AdvGAN(LightningModule):
             return losses["train_loss_discriminator"]
 
         if optimizer_idx == 2:
-            losses = self.distillation_loss(self, imgs, labels, adv_imgs)
+            losses = self.distillation_loss(imgs, labels, adv_imgs, 'train')
 
             return losses["train_loss_distillation"]
 
@@ -168,8 +168,6 @@ class AdvGAN(LightningModule):
 
     def target_model_predict(self, imgs):
         if self.tensorflow:
-            if self.is_blackbox:
-                return self.student_model(imgs)
             np_tensor = imgs.data.cpu().numpy()
             np_tensor = np_tensor.reshape(np_tensor.shape[0], -1)
 
@@ -258,16 +256,20 @@ class AdvGAN(LightningModule):
     # Soft hinge loss to bound the magnitude of the perturbation
     def perturbation_loss(self, perturbation):
         """
-        return F.mse_loss(perturbation, torch.zeros_like(perturbation, device=self.device))
-        """
         perturbation_norm = torch.mean(torch.norm(perturbation.view(perturbation.shape[0], -1), 2, dim=1))
         loss_hinge = torch.max(torch.zeros(1, device=self.device), perturbation_norm - self.C)
 
         return loss_hinge
+        """
+
+        return F.mse_loss(perturbation, torch.zeros_like(perturbation, device=self.device))
 
     def adversarial_loss(self, adv_imgs, labels):
         # Loss of fooling the target model C&W loss function:
-        preds = self.target_model_predict(adv_imgs).to(self.device)
+        if self.is_blackbox:
+            preds = self.student_model(adv_imgs)
+        else:
+            preds = self.target_model_predict(adv_imgs).to(self.device)
         probs = F.softmax(preds, dim=1)
         onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
 
@@ -335,11 +337,11 @@ class AdvGAN(LightningModule):
         student_preds_fake = self.student_model(adv_imgs)
         # student_loss = F.cross_entropy(student_preds, labels)
 
-        loss_dist_real = F.cross_entropy(
+        loss_dist_real = F.kl_div(
             F.softmax(student_preds_real / self.temp, dim=1),
             F.softmax(teacher_preds_real / self.temp, dim=1)
         )
-        loss_dist_fake = F.cross_entropy(
+        loss_dist_fake = F.kl_div(
             F.softmax(student_preds_fake / self.temp, dim=1),
             F.softmax(teacher_preds_fake / self.temp, dim=1)
         )

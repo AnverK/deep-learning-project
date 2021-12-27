@@ -31,7 +31,6 @@ model = AdvGAN(
     box_min=0,
     box_max=1,
     is_relativistic=False,
-    is_blackbox=False,
     robust_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/natural',
     target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'
 )
