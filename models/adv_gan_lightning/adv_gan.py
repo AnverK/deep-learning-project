@@ -19,7 +19,7 @@ tf.disable_v2_behavior()
 
 def weights_init(m):
     classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
+    if classname.find('Conv') != -1 or classname.find('Linear') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.02)
     elif classname.find('BatchNorm') != -1:
         nn.init.normal_(m.weight.data, 1.0, 0.02)
@@ -33,17 +33,16 @@ class AdvGAN(LightningModule):
             image_nc,
             box_min,
             box_max,
-            lr: float = 0.001,
+            lr: float = 1e-3,
             b1: float = 0.5,
             b2: float = 0.999,
             num_batches_to_log=1,
             num_samples_to_log=16,
             is_relativistic=True,
-            is_blackbox=False,
+            is_blackbox=True,
             tensorflow=True,
             robust_target_model_dir='../../mnist_challenge/models/adv_trained/',
-            target_model_dir='last.ckpt',
-            **kwargs
+            target_model_dir='last.ckpt'
     ):
         super().__init__()
 
@@ -65,9 +64,11 @@ class AdvGAN(LightningModule):
         # networks
         self.generator = Generator(self.gen_input_nc, image_nc).to(self.device)
         self.discriminator = Discriminator(image_nc).to(self.device)
+        self.student_model = StudentModel().to(self.device)
 
         self.generator.apply(weights_init)
         self.discriminator.apply(weights_init)
+        self.student_model.apply(weights_init)
 
         # self.model = TargetModel.load_from_checkpoint(checkpoint_path="last.ckpt")
 
@@ -85,11 +86,9 @@ class AdvGAN(LightningModule):
             self.target_model.freeze()
             self.target_model.eval()
 
-        self.student_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_dir)
-
         # Temperature and Scaling of Losses for the distillation
         self.temp = 10
-        self.alpha = 0.3
+        # self.alpha = 0.3
         # Used for the perturbation/hinge loss
         self.C = 0.1
         # To scale the importance of losses
@@ -109,9 +108,6 @@ class AdvGAN(LightningModule):
 
         if optimizer_idx == 0:
             losses = self.generator_losses(imgs, labels, adv_imgs, perturbation, 'train')
-
-            if self.is_blackbox:
-                self.train_distillation(imgs, labels, adv_imgs)
             
             return losses["train_loss_generator"]
 
@@ -120,11 +116,16 @@ class AdvGAN(LightningModule):
 
             return losses["train_loss_discriminator"]
 
+        if optimizer_idx == 2:
+            losses = self.distillation_loss(self, imgs, labels, adv_imgs)
+
+            return losses["train_loss_distillation"]
+
     def on_epoch_end(self):
         if self.current_epoch == 50:
-            self.lr = 0.0001
+            self.lr = 1e-4
         if self.current_epoch == 80:
-            self.lr = 0.00001
+            self.lr = 1e-5
 
     def validation_step(self, batch, batch_idx):
         imgs, labels = batch
@@ -165,7 +166,7 @@ class AdvGAN(LightningModule):
             ]
         })
 
-    def target_model_predict(self, imgs, labels):
+    def target_model_predict(self, imgs):
         if self.tensorflow:
             if self.is_blackbox:
                 return self.student_model(imgs)
@@ -179,8 +180,8 @@ class AdvGAN(LightningModule):
         return self.target_model(imgs)
 
     def target_model_metrics(self, imgs, labels, adv_imgs, stage='validation'):
-        labels_original_pred = self.target_model_predict(imgs, labels).to(self.device).argmax(1)
-        labels_adversarial_pred = self.target_model_predict(adv_imgs, labels).to(self.device).argmax(1)
+        labels_original_pred = self.target_model_predict(imgs).to(self.device).argmax(1)
+        labels_adversarial_pred = self.target_model_predict(adv_imgs).to(self.device).argmax(1)
 
         accuracy_original = accuracy(labels_original_pred, labels)
         accuracy_adversarial = accuracy(labels_adversarial_pred, labels)
@@ -198,29 +199,6 @@ class AdvGAN(LightningModule):
         )
 
         return labels_original_pred, labels_adversarial_pred
-
-    # Triying to implement a combination of
-    # https://koushik0901.medium.com/knowledge-distillation-with-pytorch-40febcf77440 and
-    # https://github.com/carlini/nn_robust_attacks/blob/master/train_models.py
-    def train_distillation(self, imgs, labels, adv_imgs):
-        # forward
-        teacher_preds = self.target_model_predict(imgs, labels).to(self.device)
-
-        student_preds = self.student_model(imgs)
-        student_loss = F.cross_entropy(student_preds, labels)
-
-        distillation_loss = F.kl_div(
-            F.softmax(student_preds / self.temp, dim=1),
-            F.softmax(teacher_preds / self.temp, dim=1)
-        )
-        loss = self.alpha * student_loss + (1 - self.alpha) * distillation_loss
-
-        # Does this work for optimizing the Student Model
-        # backward
-        optimizer.zero_grad()
-        loss.backward()
-
-        optimizer.step()
 
     def generate_adv_imgs(self, imgs):
         perturbation = self.generator(imgs)
@@ -289,7 +267,7 @@ class AdvGAN(LightningModule):
 
     def adversarial_loss(self, adv_imgs, labels):
         # Loss of fooling the target model C&W loss function:
-        preds = self.target_model_predict(adv_imgs, labels).to(self.device)
+        preds = self.target_model_predict(adv_imgs).to(self.device)
         probs = F.softmax(preds, dim=1)
         onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
 
@@ -348,6 +326,39 @@ class AdvGAN(LightningModule):
 
         return losses
 
+    def distillation_loss(self, imgs, labels, adv_imgs, stage='train'):
+        # forward
+        teacher_preds_real = self.target_model_predict(imgs).to(self.device)
+        teacher_preds_fake = self.target_model_predict(adv_imgs).to(self.device)
+
+        student_preds_real = self.student_model(imgs)
+        student_preds_fake = self.student_model(adv_imgs)
+        # student_loss = F.cross_entropy(student_preds, labels)
+
+        loss_dist_real = F.cross_entropy(
+            F.softmax(student_preds_real / self.temp, dim=1),
+            F.softmax(teacher_preds_real / self.temp, dim=1)
+        )
+        loss_dist_fake = F.cross_entropy(
+            F.softmax(student_preds_fake / self.temp, dim=1),
+            F.softmax(teacher_preds_fake / self.temp, dim=1)
+        )
+
+        loss_distillation = torch.mean(loss_dist_real) + torch.mean(loss_dist_fake)
+
+        losses = {
+            f"{stage}_loss_distillation": loss_distillation,
+        }
+
+        self.log_dict(
+            losses,
+            prog_bar=True,
+            on_step=True,
+            on_epoch=True
+        )
+
+        return losses
+
     def optimizer_step(
             self,
             epoch,
@@ -367,7 +378,15 @@ class AdvGAN(LightningModule):
         if optimizer_idx == 1:
             optimizer.step(closure=optimizer_closure)
 
+        if self.is_blackbox and optimizer_idx == 2:
+            optimizer.step(closure=optimizer_closure)
+
     def configure_optimizers(self):
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
-        return [opt_g, opt_d], []
+
+        if not self.is_blackbox:
+            return [opt_g, opt_d], []
+
+        opt_sm = torch.optim.Adam(self.student_model.parameters(), lr=1e-4)
+        return [opt_g, opt_d, opt_sm], []
