@@ -87,8 +87,8 @@ class AdvGAN(LightningModule):
             self.target_model.eval()
 
         # Temperature and Scaling of Losses for the distillation
-        self.temp = 10
-        # self.alpha = 0.3
+        self.temp = 2
+        self.alpha = 0.3
         # Used for the perturbation/hinge loss
         self.C = 0.1
         # To scale the importance of losses
@@ -335,18 +335,20 @@ class AdvGAN(LightningModule):
 
         student_preds_real = self.student_model(imgs)
         student_preds_fake = self.student_model(adv_imgs)
-        # student_loss = F.cross_entropy(student_preds, labels)
+
+        student_loss = F.cross_entropy(student_preds_real, labels)
 
         loss_dist_real = F.kl_div(
-            F.softmax(student_preds_real / self.temp, dim=1),
+            F.log_softmax(student_preds_real / self.temp, dim=1),
             F.softmax(teacher_preds_real / self.temp, dim=1)
         )
         loss_dist_fake = F.kl_div(
-            F.softmax(student_preds_fake / self.temp, dim=1),
+            F.log_softmax(student_preds_fake / self.temp, dim=1),
             F.softmax(teacher_preds_fake / self.temp, dim=1)
         )
 
-        loss_distillation = torch.mean(loss_dist_real) + torch.mean(loss_dist_fake)
+        loss_distillation = loss_dist_real + loss_dist_fake
+        loss_distillation = self.alpha * student_loss + (1 - self.alpha) * loss_distillation
 
         losses = {
             f"{stage}_loss_distillation": loss_distillation,
