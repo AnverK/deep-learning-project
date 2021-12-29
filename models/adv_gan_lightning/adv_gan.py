@@ -46,6 +46,7 @@ class AdvGAN(LightningModule):
     ):
         super().__init__()
 
+        self.save_hyperparameters()
         output_nc = image_nc
         self.model_num_labels = model_num_labels
         self.gen_input_nc = image_nc
