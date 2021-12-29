@@ -70,21 +70,20 @@ class AdvGAN(LightningModule):
         self.discriminator.apply(weights_init)
         self.student_model.apply(weights_init)
 
-        # self.model = TargetModel.load_from_checkpoint(checkpoint_path="last.ckpt")
-
-        self.target_model = Model()
-        self.sess = tf.Session(config=tf.ConfigProto(
-            device_count={'GPU': 0}
-        ))
-        model_file = tf.train.latest_checkpoint(robust_target_model_dir)
-
-        saver = tf.train.Saver()
-        saver.restore(self.sess, model_file)
-
         if not self.tensorflow:
-            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_dir)
+            self.target_model = TargetModel()
+            self.target_model.load_state_dict(torch.load(target_model_dir))
             self.target_model.freeze()
             self.target_model.eval()
+        else:
+            self.target_model = Model()
+            self.sess = tf.Session(config=tf.ConfigProto(
+                device_count={'GPU': 0}
+            ))
+            model_file = tf.train.latest_checkpoint(robust_target_model_dir)
+
+            saver = tf.train.Saver()
+            saver.restore(self.sess, model_file)
 
         # Temperature and Scaling of Losses for the distillation
         self.temp = 2
@@ -239,8 +238,8 @@ class AdvGAN(LightningModule):
 
         real = torch.ones_like(pred_real, device=self.device)
 
-        lossG_real = torch.mean((logits_real - torch.mean(logits_fake) + real)**2)
-        lossG_fake = torch.mean((logits_fake - torch.mean(logits_real) - real)**2)
+        lossG_real = torch.mean((logits_real - torch.mean(logits_fake) + real) ** 2)
+        lossG_fake = torch.mean((logits_fake - torch.mean(logits_real) - real) ** 2)
 
         lossG = (lossG_real + lossG_fake) / 2
 
