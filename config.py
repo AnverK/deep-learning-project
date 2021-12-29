@@ -7,7 +7,7 @@ class Config():
     ADV_GAN_BATCH_SIZE = 256
     ADV_GAN_FOLDER = 'adv_gan'
 
-    USER = 'osaeedi'
+    USER = 'mboss'
     SCRATCH_PATH = f'/cluster/scratch/{USER}'
     LOGS_PATH = f'{SCRATCH_PATH}/dl_logs'
 

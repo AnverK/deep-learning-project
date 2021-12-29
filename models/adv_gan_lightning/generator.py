@@ -10,7 +10,7 @@ class Generator(nn.Module):
 
         encoder_lis = [
             # MNIST:1*28*28
-            nn.Conv2d(latent_dim, 8, kernel_size=3, stride=1, padding=0, bias=True),
+        nn.Conv2d(latent_dim, 8, kernel_size=3, stride=1, padding=0, bias=True),
             nn.InstanceNorm2d(8),
             nn.ReLU(),
             # 8*26*26

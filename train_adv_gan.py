@@ -30,9 +30,11 @@ model = AdvGAN(
     image_nc=1,
     box_min=0,
     box_max=1,
-    is_relativistic=False,
-    robust_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/natural',
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'
+    is_relativistic=True,
+    is_blackbox=True,
+    tensorflow=False,
+    robust_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}_adv/model.ckpt',
+    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}_adv/model.ckpt'
 )
 
 wandb_logger = pl_loggers.WandbLogger(
@@ -55,7 +57,7 @@ callbacks = [checkpoint_callback]
 
 trainer = Trainer(
     gpus=-1,
-    max_epochs=60,
+    max_epochs=200,
     precision=16,
     callbacks=callbacks,
     benchmark=True,
