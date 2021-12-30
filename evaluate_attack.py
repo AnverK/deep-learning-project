@@ -55,7 +55,7 @@ if __name__ == "__main__":
     X = test_data.data
     X = X / 255
     X = torch.unsqueeze(X, 1)
-    _, X_adv = adv_model.generate_adv_imgs(X)
+    X_adv = adv_model.generate_adversarial(X)
     y = test_data.targets
     if eval_defense:
         X_res = defense_model.generate_restored(X_adv)

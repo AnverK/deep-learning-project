@@ -216,6 +216,11 @@ class AdvGAN(LightningModule):
 
         return perturbation, adv_imgs
 
+    def generate_adversarial(self, imgs):
+        perturbation, adv_imgs = self.generate_adv_imgs(imgs)
+
+        return adv_imgs
+
     def generator_losses(self, imgs, labels, adv_imgs, perturbation, stage='train'):
         if self.is_relativistic:
             loss_generator = self.generator_loss_relativistic(imgs, adv_imgs)
