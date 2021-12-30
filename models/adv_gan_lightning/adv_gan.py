@@ -2,7 +2,7 @@ from .discriminator import Discriminator
 from .generator import Generator
 from .target_model import TargetModel
 from .student_model import StudentModel
-from .robust_model import Model
+from .robust_tf_model import Model
 
 import torch
 import torch.nn as nn
@@ -41,17 +41,16 @@ class AdvGAN(LightningModule):
             is_relativistic=True,
             is_blackbox=True,
             tensorflow=True,
-            robust_target_model_dir='../../mnist_challenge/models/adv_trained/',
-            target_model_dir='last.ckpt'
+            tf_target_model_dir='../target_models/tf/adv_trained/',
+            target_model_dir='../target_models/pytorch/adv_trained.ckpt'
     ):
         super().__init__()
 
         self.save_hyperparameters()
 
-        output_nc = image_nc
         self.model_num_labels = model_num_labels
         self.gen_input_nc = image_nc
-        self.output_nc = output_nc
+        self.image_nc = image_nc
         self.box_min = box_min
         self.box_max = box_max
         self.b2 = b2
@@ -64,36 +63,25 @@ class AdvGAN(LightningModule):
         self.tensorflow = tensorflow
 
         # networks
-        self.generator = Generator(self.gen_input_nc, image_nc)
-        self.discriminator = Discriminator(image_nc)
-        self.student_model = StudentModel()
+        self.generator = Generator(self.gen_input_nc, self.image_nc).to(self.device)
+        self.discriminator = Discriminator(self.image_nc).to(self.device)
+        self.student_model = StudentModel().to(self.device)
 
         self.generator.apply(weights_init)
         self.discriminator.apply(weights_init)
         self.student_model.apply(weights_init)
 
-        # self.model = TargetModel.load_from_checkpoint(checkpoint_path="last.ckpt")
-
-        self.target_model = Model()
-
-        if self.tensorflow:
-            self.sess = tf.Session(config=tf.ConfigProto(device_count={'GPU': 0}))
-            model_file = tf.train.latest_checkpoint(robust_target_model_dir)
-
-            saver = tf.train.Saver()
-            saver.restore(self.sess, model_file)
-
         if not self.tensorflow:
-            self.target_model = TargetModel()
-            self.target_model.load_state_dict(torch.load(target_model_dir))            
+            self.target_model = TargetModel().to(self.device)
+            self.target_model.load_state_dict(torch.load(target_model_dir))
             self.target_model.freeze()
             self.target_model.eval()
         else:
-            self.target_model = Model()
+            self.target_model = Model().to(self.device)
             self.sess = tf.Session(config=tf.ConfigProto(
                 device_count={'GPU': 0}
             ))
-            model_file = tf.train.latest_checkpoint(robust_target_model_dir)
+            model_file = tf.train.latest_checkpoint(tf_target_model_dir)
 
             saver = tf.train.Saver()
             saver.restore(self.sess, model_file)
@@ -127,7 +115,7 @@ class AdvGAN(LightningModule):
 
         if optimizer_idx == 0:
             losses = self.generator_losses(imgs, labels, adv_imgs, perturbation, 'train')
-            
+
             return losses["train_loss_generator"]
 
         if optimizer_idx == 1:
@@ -186,20 +174,20 @@ class AdvGAN(LightningModule):
 
             logits = self.target_model.pre_softmax.eval(session=self.sess,
                                                         feed_dict={self.target_model.x_input: np_tensor})
-            return torch.from_numpy(logits)
+            return torch.from_numpy(logits).to(self.device)
 
         return self.target_model(imgs)
 
     def target_model_metrics(self, imgs, labels, adv_imgs, stage='validation'):
-        labels_original_pred = self.target_model_predict(imgs).to(self.device).argmax(1)
-        labels_adversarial_pred = self.target_model_predict(adv_imgs).to(self.device).argmax(1)
+        labels_original_pred = self.target_model_predict(imgs).argmax(1)
+        labels_adversarial_pred = self.target_model_predict(adv_imgs).argmax(1)
 
         accuracy_original = accuracy(labels_original_pred, labels)
         accuracy_adversarial = accuracy(labels_adversarial_pred, labels)
 
         if self.is_blackbox:
-            labels_original_pred_student = self.student_model(imgs).to(self.device).argmax(1)
-            labels_adversarial_pred_student = self.student_model(adv_imgs).to(self.device).argmax(1)
+            labels_original_pred_student = self.student_model(imgs).argmax(1)
+            labels_adversarial_pred_student = self.student_model(adv_imgs).argmax(1)
 
             accuracy_original_student = accuracy(labels_original_pred_student, labels)
             accuracy_adversarial_student = accuracy(labels_adversarial_pred_student, labels)
@@ -278,20 +266,20 @@ class AdvGAN(LightningModule):
 
     # Soft hinge loss to bound the magnitude of the perturbation
     def perturbation_loss(self, perturbation):
+        """
+        return F.mse_loss(perturbation, torch.zeros_like(perturbation, device=self.device))
+        """
         perturbation_norm = torch.mean(torch.norm(perturbation.view(perturbation.shape[0], -1), 2, dim=1))
         loss_hinge = torch.max(torch.zeros(1, device=self.device), perturbation_norm - self.C)
 
         return loss_hinge
-        
-
-        return F.mse_loss(perturbation, torch.zeros_like(perturbation, device=self.device))
 
     def adversarial_loss(self, adv_imgs, labels):
         # Loss of fooling the target model C&W loss function:
         if self.is_blackbox:
             preds = self.student_model(adv_imgs)
         else:
-            preds = self.target_model_predict(adv_imgs).to(self.device)
+            preds = self.target_model_predict(adv_imgs)
 
         probs = F.softmax(preds, dim=1)
         onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
@@ -350,8 +338,8 @@ class AdvGAN(LightningModule):
         return losses
 
     def distillation_loss(self, imgs, labels, adv_imgs, stage='train'):
-        teacher_preds_real = self.target_model_predict(imgs).to(self.device)
-        teacher_preds_fake = self.target_model_predict(adv_imgs).to(self.device)
+        teacher_preds_real = self.target_model_predict(imgs)
+        teacher_preds_fake = self.target_model_predict(adv_imgs)
 
         student_preds_real = self.student_model(imgs)
         student_preds_fake = self.student_model(adv_imgs)
@@ -413,11 +401,9 @@ class AdvGAN(LightningModule):
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
 
-
         if not self.is_blackbox:
             return [opt_g, opt_d], []
 
         opt_sm = torch.optim.Adam(self.student_model.parameters(), lr=1e-4)
-        
 
         return [opt_g, opt_d, opt_sm], []

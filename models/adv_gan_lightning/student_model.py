@@ -8,29 +8,23 @@ class StudentModel(nn.Module):
         super(StudentModel, self).__init__()
 
         self.input_net = nn.Sequential(
-            nn.Conv2d(1, 32, kernel_size=3),
+            nn.Conv2d(1, 32, kernel_size=5, padding='same'),
             nn.ReLU(),
-            nn.Conv2d(32, 32, kernel_size=3),
+            nn.MaxPool2d(2, stride=2),
+            nn.Conv2d(32, 64, kernel_size=5, padding='same'),
             nn.ReLU(),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, kernel_size=3),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3),
-            nn.ReLU(),
-            nn.MaxPool2d(2)
+            nn.MaxPool2d(2, stride=2),
         )
-
         self.output_net = nn.Sequential(
-            nn.Linear(64 * 4 * 4, 200),
+            nn.Flatten(start_dim=1),
+            nn.Linear(64 * 7 * 7, 1024),
             nn.ReLU(),
-            nn.Dropout(p=0.5),
-            nn.Linear(200, 200),
-            nn.ReLU(),
-            nn.Linear(200, 10)
+            nn.Linear(1024, 10)
         )
 
     def forward(self, x):
         x = self.input_net(x)
-        x = x.view(-1, 64 * 4 * 4)
+        x = x.permute(0, 2, 3, 1)  # CRUCIAL MAGIC FOR TF-compatibility
         x = self.output_net(x)
         return x
+

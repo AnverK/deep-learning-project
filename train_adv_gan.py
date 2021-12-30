@@ -33,7 +33,7 @@ model = AdvGAN(
     is_relativistic=True,
     is_blackbox=True,
     tensorflow=False,
-    robust_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}_adv/model.ckpt',
+    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}_adv/model.ckpt',
     target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}_adv/model.ckpt'
 )
 
