@@ -14,7 +14,6 @@ class ApeGan(pl.LightningModule):
             in_ch=1, 
             gen_loss_scale=0.7, 
             dis_loss_scale=0.3, 
-            per_loss_scale=0,
             lr=2e-4, 
             attack=None,
             target_model_dir=None,
@@ -25,7 +24,6 @@ class ApeGan(pl.LightningModule):
         
         self.gen_loss_scale = gen_loss_scale
         self.dis_loss_scale = dis_loss_scale
-        self.per_loss_scale = per_loss_scale
 
         self.lr = lr
         
@@ -72,7 +70,6 @@ class ApeGan(pl.LightningModule):
 
             loss_generator = self.gen_loss_scale * self.loss_mse(X_res, X) \
                 + self.dis_loss_scale * self.loss_bce(y_fake, t_real) \
-                + self.per_loss_scale * self.perturbation_loss(perturbation)
 
             losses = {
                 "train_loss_generator": loss_generator
@@ -155,14 +152,12 @@ class ApeGan(pl.LightningModule):
 
         loss_generator_total = self.gen_loss_scale * loss_generator \
                         + self.dis_loss_scale * loss_discriminator_fake \
-                        + self.per_loss_scale * loss_perturbation
         
         losses = {
             "validation_loss_discriminiator": loss_discriminator,
-            "validation_loss_generator_total": loss_generator_total,
-            "loss_generator": loss_generator,
-            "loss_discriminator_fake": loss_discriminator_fake,
-            "loss_perturbation": loss_perturbation,
+            "validation_loss_generator": loss_generator_total,
+            "validation_loss_generator_mse": loss_generator,
+            "validation_loss_discriminator_fake": loss_discriminator_fake,
         }
 
         self.log_dict(
