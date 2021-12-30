@@ -10,6 +10,8 @@ os.environ['WANDB_SAVE_CODE'] = "true"
 
 from models.ape_gan_lightning.ape_gan import ApeGan
 from models.adv_gan_lightning.adv_gan import AdvGAN
+import attacks
+
 from config import Config
 
 pl.seed_everything(36)
@@ -31,6 +33,14 @@ attack = AdvGAN.load_from_checkpoint(
     target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt')
 attack.freeze()
 attack.eval()
+
+"""
+attack = attacks.FGSM(
+            target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted/adv_trained.ckpt')
+# attack = attacks.PGD(
+            target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted/adv_trained.ckpt')
+# attack.eval()
+"""
 
 model = ApeGan(
     1,

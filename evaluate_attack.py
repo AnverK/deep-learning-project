@@ -7,6 +7,7 @@ from config import Config
 from models.adv_gan_lightning.adv_gan import AdvGAN
 from models.adv_gan_lightning.target_model import TargetModel
 from models.ape_gan_lightning.ape_gan import ApeGan
+import attacks
 
 
 def check_distance(X, X_adv, eps=0.3):
@@ -51,6 +52,14 @@ if __name__ == "__main__":
         test_data = datasets.MNIST('mnist', train=False, download=True)
     else:
         raise Exception("Other datasets are not supported yet")
+
+    """
+    adv_model = attacks.FGSM(
+                target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted/adv_trained.ckpt')
+    # adv_model = attacks.PGD(
+                target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted/adv_trained.ckpt')
+    # adv_model.eval()
+    """
 
     X = test_data.data
     X = X / 255
