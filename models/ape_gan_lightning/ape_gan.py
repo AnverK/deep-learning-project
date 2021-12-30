@@ -38,7 +38,8 @@ class ApeGan(pl.LightningModule):
         self.num_samples_to_log = num_samples_to_log
 
         if target_model_dir is not None:
-            self.target_model = TargetModel.load_from_checkpoint(checkpoint_path=target_model_dir)
+            self.target_model = TargetModel()
+            self.target_model.load_state_dict(torch.load(target_model_dir))
             self.target_model.freeze()
             self.target_model.eval()
 

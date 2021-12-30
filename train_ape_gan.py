@@ -24,8 +24,11 @@ dm = MNISTDataModule(
     drop_last=True
 )
 
-attack = AdvGAN.load_from_checkpoint(f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt',
-                                     target_model_checkpoint_path=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt')
+attack = AdvGAN.load_from_checkpoint(
+    f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt',
+    model_num_labels=10, image_nc=1, box_min=0, box_max=1,
+    tensorflow=False, is_blackbox=True, is_relativistic=False,
+    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt')
 attack.freeze()
 attack.eval()
 
@@ -35,7 +38,7 @@ model = ApeGan(
     Config.APE_GAN_dis_loss_scale,
     Config.APE_GAN_lr,
     attack=attack,
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/last.ckpt'
+    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt'
 )
 
 wandb_logger = pl_loggers.WandbLogger(
