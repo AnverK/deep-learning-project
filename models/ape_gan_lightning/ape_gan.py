@@ -111,6 +111,11 @@ class ApeGan(pl.LightningModule):
 
         return perturbation, res_imgs
 
+    def generate_restored(self, adv_imgs):
+        perturbation, res_imgs = self.generate_res_imgs(adv_imgs)
+
+        return res_imgs
+
     def perturbation_loss(self, perturbation):
         perturbation_norm = torch.mean(torch.norm(perturbation.view(perturbation.shape[0], -1), 2, dim=1))
         loss_hinge = torch.max(torch.zeros(1, device=self.device), perturbation_norm - self.C)
