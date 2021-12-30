@@ -103,8 +103,8 @@ class AdvGAN(LightningModule):
         self.dist_tradeoff_epochs = 10
         self.dist_cutoff = 0.7
 
-    def forward(self, z):
-        perturbations, adv_imgs = self.generate_adv_imgs(z)
+    def forward(self, imgs):
+        perturbations, adv_imgs = self.generate_adv_imgs(imgs)
 
         return adv_imgs
 
@@ -215,11 +215,6 @@ class AdvGAN(LightningModule):
         adv_imgs = torch.clamp(adv_imgs, self.box_min, self.box_max)
 
         return perturbation, adv_imgs
-
-    def generate_adversarial(self, imgs):
-        perturbation, adv_imgs = self.generate_adv_imgs(imgs)
-
-        return adv_imgs
 
     def generator_losses(self, imgs, labels, adv_imgs, perturbation, stage='train'):
         if self.is_relativistic:
