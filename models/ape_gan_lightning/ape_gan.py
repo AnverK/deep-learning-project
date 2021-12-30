@@ -14,6 +14,7 @@ class ApeGan(pl.LightningModule):
             in_ch=1, 
             gen_loss_scale=0.7, 
             dis_loss_scale=0.3, 
+            per_loss_scale=0,
             lr=2e-4, 
             attack=None,
             target_model_dir=None,
@@ -24,12 +25,19 @@ class ApeGan(pl.LightningModule):
         
         self.gen_loss_scale = gen_loss_scale
         self.dis_loss_scale = dis_loss_scale
+        self.per_loss_scale = per_loss_scale
+
         self.lr = lr
         
         self.generator = Generator(in_ch)
         self.discriminator = Discriminator(in_ch)
     
         self.attack = attack
+
+        self.box_min = 0.
+        self.box_max = 1.
+
+        self.C = 0.1
 
         self.loss_bce = nn.BCEWithLogitsLoss()
         self.loss_mse = nn.MSELoss()
@@ -59,10 +67,12 @@ class ApeGan(pl.LightningModule):
         t_fake = torch.zeros(X.shape[0], device=self.device)
 
         if optimizer_idx == 0:
-            X_fake = self.generator(X_adv)
-            y_fake = self.discriminator(X_fake)
+            perturbation, X_res = self.generate_res_imgs(X_adv)
+            y_fake = self.discriminator(X_res)
 
-            loss_generator = self.gen_loss_scale * self.loss_mse(X_fake, X) + self.dis_loss_scale * self.loss_bce(y_fake, t_real)
+            loss_generator = self.gen_loss_scale * self.loss_mse(X_res, X) \
+                + self.dis_loss_scale * self.loss_bce(y_fake, t_real) \
+                + self.per_loss_scale * self.perturbation_loss(perturbation)
 
             losses = {
                 "train_loss_generator": loss_generator
@@ -71,15 +81,15 @@ class ApeGan(pl.LightningModule):
             self.log_dict(
                 losses,
                 prog_bar=True,
-                on_step=True,
+                on_step=False,
                 on_epoch=True
             )
 
             return loss_generator
         elif optimizer_idx == 1:
             y_real = self.discriminator(X)
-            X_fake = self.generator(X_adv)
-            y_fake = self.discriminator(X_fake)
+            _, X_res = self.generate_res_imgs(X_adv)
+            y_fake = self.discriminator(X_res)
 
             loss_discriminator = self.loss_bce(y_real, t_real) + self.loss_bce(y_fake, t_fake)
 
@@ -90,11 +100,25 @@ class ApeGan(pl.LightningModule):
             self.log_dict(
                 losses,
                 prog_bar=True,
-                on_step=True,
+                on_step=False,
                 on_epoch=True
             )
 
             return loss_discriminator
+
+    def generate_res_imgs(self, imgs):
+        perturbation = self.generator(imgs)
+
+        res_imgs = perturbation + imgs
+        res_imgs = torch.clamp(res_imgs, self.box_min, self.box_max)
+
+        return perturbation, res_imgs
+
+    def perturbation_loss(self, perturbation):
+        perturbation_norm = torch.mean(torch.norm(perturbation.view(perturbation.shape[0], -1), 2, dim=1))
+        loss_hinge = torch.max(torch.zeros(1, device=self.device), perturbation_norm - self.C)
+
+        return loss_hinge
 
     def validation_step(self, batch, batch_idx):
         X, X_adv = batch            
@@ -111,33 +135,44 @@ class ApeGan(pl.LightningModule):
             """
             
             X_adv = self.attack(X)
-            X_res = self.generator(X_adv)
-
-            y_original_pred, y_adversarial_pred, y_restored_pred = self.target_model_metrics(X, y, X_adv, X_res)
+        
+        perturbation, X_res = self.generate_res_imgs(X_adv)
 
         t_real = torch.ones(X.shape[0], device=self.device)
         t_fake = torch.zeros(X.shape[0], device=self.device)
 
         y_real = self.discriminator(X)
-        X_fake = self.generator(X_adv)
-        y_fake = self.discriminator(X_fake)
+        y_fake = self.discriminator(X_res)
+
+        loss_perturbation = self.perturbation_loss(perturbation)
+        loss_discriminator_fake = self.loss_bce(y_fake, t_real)
+        loss_generator = self.loss_mse(X_res, X)
+
+        if self.attack is not None:
+            y_original_pred, y_adversarial_pred, y_restored_pred = self.target_model_metrics(X, y, X_adv, X_res)
 
         loss_discriminator = self.loss_bce(y_real, t_real) + self.loss_bce(y_fake, t_fake)
-        loss_generator = self.gen_loss_scale * self.loss_mse(X_fake, X) + self.dis_loss_scale * self.loss_bce(y_fake, t_real)
 
+        loss_generator_total = self.gen_loss_scale * loss_generator \
+                        + self.dis_loss_scale * loss_discriminator_fake \
+                        + self.per_loss_scale * loss_perturbation
+        
         losses = {
             "validation_loss_discriminiator": loss_discriminator,
-            "validation_loss_generator": loss_generator
+            "validation_loss_generator_total": loss_generator_total,
+            "loss_generator": loss_generator,
+            "loss_discriminator_fake": loss_discriminator_fake,
+            "loss_perturbation": loss_perturbation,
         }
 
         self.log_dict(
             losses,
             prog_bar=True,
-            on_step=True,
+            on_step=False,
             on_epoch=True
         )
 
-        return X, y, X_adv, X_fake, y_original_pred, y_adversarial_pred, y_restored_pred
+        return X, y, X_adv, X_res, y_original_pred, y_adversarial_pred, y_restored_pred
 
     def target_model_metrics(self, imgs, labels, adv_imgs, res_imgs, stage='validation'):
         y_original_pred = self.target_model(imgs).argmax(1)
@@ -157,7 +192,7 @@ class ApeGan(pl.LightningModule):
         self.log_dict(
             losses,
             prog_bar=True,
-            on_step=True,
+            on_step=False,
             on_epoch=True
         )
 

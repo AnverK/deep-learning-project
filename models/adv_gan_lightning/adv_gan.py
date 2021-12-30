@@ -47,6 +47,7 @@ class AdvGAN(LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
+
         output_nc = image_nc
         self.model_num_labels = model_num_labels
         self.gen_input_nc = image_nc
@@ -103,9 +104,9 @@ class AdvGAN(LightningModule):
         # Used for the perturbation/hinge loss
         self.C = 0.1
         # To scale the importance of losses
-        self.gen_lambda = 1e-1
-        self.adv_lambda = 100
-        self.pert_lambda = 1e-1
+        self.gen_lambda = 1
+        self.adv_lambda = 150
+        self.pert_lambda = 5
 
         self.epoch_decay = 500
 
@@ -322,10 +323,8 @@ class AdvGAN(LightningModule):
             lossD_real = torch.mean((logits_real - torch.mean(logits_fake) - real) ** 2)
             lossD_fake = torch.mean((logits_fake - torch.mean(logits_real) + real) ** 2)
         else:
-            lossD_real = F.binary_cross_entropy_with_logits(pred_real, real)
-            lossD_fake = F.binary_cross_entropy_with_logits(pred_fake, fake)
-            #lossD_real = F.mse_loss(F.softmax(pred_real), valid) # why mse instead of bce?
-            #lossD_real = F.mse_loss(F.softmax(pred_fake), fake)
+            lossD_real = F.mse_loss(pred_real, real)
+            lossD_fake = F.mse_loss(pred_fake, fake)
 
         return lossD_real, lossD_fake
 
@@ -351,7 +350,6 @@ class AdvGAN(LightningModule):
         return losses
 
     def distillation_loss(self, imgs, labels, adv_imgs, stage='train'):
-        # forward
         teacher_preds_real = self.target_model_predict(imgs).to(self.device)
         teacher_preds_fake = self.target_model_predict(adv_imgs).to(self.device)
 
@@ -401,7 +399,6 @@ class AdvGAN(LightningModule):
             using_native_amp=False,
             using_lbfgs=False,
     ):
-        # update generator twice
         if optimizer_idx == 0:
             optimizer.step(closure=optimizer_closure)
             optimizer.step(closure=optimizer_closure)
@@ -411,25 +408,6 @@ class AdvGAN(LightningModule):
 
         if self.is_blackbox and optimizer_idx == 2:
             optimizer.step(closure=optimizer_closure)
-
-    def on_epoch_end(self):
-        return
-        if self.current_epoch > self.dist_tradeoff_epochs:
-            fraction = (self.current_epoch - self.dist_tradeoff_epochs) / self.dist_tradeoff_epochs
-
-            if fraction > self.dist_cutoff:
-                return
-            
-            self.dist_real_scale = 1. - fraction
-            self.dist_fake_scale = min(fraction, 1.)
-
-
-    def lr_lambda(self, epoch):
-        if epoch > 2 * self.epoch_decay: return 0
-
-        fraction = (epoch - self.epoch_decay) / self.epoch_decay
-        
-        return 1 if epoch < self.epoch_decay else 1 - fraction
 
     def configure_optimizers(self):
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
@@ -441,8 +419,5 @@ class AdvGAN(LightningModule):
 
         opt_sm = torch.optim.Adam(self.student_model.parameters(), lr=1e-4)
         
-        #sched_g = torch.optim.swa_utils.SWALR(opt_g, anneal_strategy="linear", anneal_epochs=50, swa_lr=1e-4)
-        #sched_d = torch.optim.swa_utils.SWALR(opt_d, anneal_strategy="linear", anneal_epochs=50, swa_lr=1e-4)
-        #sched_sm = torch.optim.swa_utils.SWALR(opt_sm, anneal_strategy="linear", anneal_epochs=20, swa_lr=1e-5)
 
         return [opt_g, opt_d, opt_sm], []
