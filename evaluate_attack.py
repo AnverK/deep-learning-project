@@ -7,7 +7,7 @@ from config import Config
 from models.adv_gan.adv_gan import AdvGAN
 from models.ape_gan.ape_gan import ApeGan
 from models.target_models.target_model import TargetModel
-from attacks import FGSM, CW_L2
+from attacks import FGSM, PGD
 
 
 def check_distance(X, X_adv, eps=0.3):
@@ -89,10 +89,10 @@ if __name__ == "__main__":
         defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/fgsm/{Config.APE_GAN_CKPT}'
 
         adv_model = FGSM(target_model_dir=args.robust_model_path)
-    elif args.attack == 'cw_l2':
-        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/cw_l2/{Config.APE_GAN_CKPT}'
+    elif args.attack == 'pgd':
+        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/pgd/{Config.APE_GAN_CKPT}'
 
-        adv_model = CW_L2(target_model_dir=args.robust_model_path)
+        adv_model = PGD(target_model_dir=args.robust_model_path)
     elif args.attack != '':
         print("This attack is not implemented!")
         quit()

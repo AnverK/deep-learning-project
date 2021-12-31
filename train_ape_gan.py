@@ -11,7 +11,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelChec
 from config import Config
 from models.adv_gan.adv_gan import AdvGAN
 from models.ape_gan.ape_gan import ApeGan
-from attacks import FGSM, CW_L2
+from attacks import FGSM, PGD
 
 os.environ['WANDB_SAVE_CODE'] = "true"
 
@@ -112,10 +112,10 @@ elif args.attack == 'fgsm':
     defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/fgsm'
 
     attack = FGSM(target_model_dir=args.robust_model_path)
-elif args.attack == 'cw_l2':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/cw_l2'
+elif args.attack == 'pgd':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/pgd'
 
-    attack = CW_L2(target_model_dir=args.robust_model_path)
+    attack = PGD(target_model_dir=args.robust_model_path)
 else:
     print("This attack is not implemented!")
     quit()
