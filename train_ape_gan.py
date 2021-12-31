@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import torch
@@ -10,7 +11,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelChec
 from config import Config
 from models.adv_gan.adv_gan import AdvGAN
 from models.ape_gan.ape_gan import ApeGan
-from attacks import FGSM, PGD
+from attacks import FGSM, CW_L2
 
 os.environ['WANDB_SAVE_CODE'] = "true"
 
@@ -19,6 +20,66 @@ pl.seed_everything(36)
 os.makedirs(Config.LOGS_PATH, exist_ok=True)
 os.makedirs(f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/', exist_ok=True)
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--attack", type=str, default='')
+parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt')
+parser.add_argument("--robust-model-path", type=str,
+                    default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt')
+parser.add_argument("--defense-model-path", type=str,
+                    default=f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/last.ckpt')
+args = parser.parse_args()
+
+defense_model_path = args.defense_model_path
+adv_model_path = args.adv_model_path
+
+if args.attack == 'adv_gan_whitebox':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_WB_FOLDER}/last.ckpt'
+
+    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_WB_FOLDER}/last.ckpt'
+
+    attack = AdvGAN.load_from_checkpoint(
+        adv_model_path,
+        model_num_labels=10,
+        image_nc=1,
+        box_min=0,
+        box_max=1,
+        tensorflow=False,
+        is_blackbox=False,
+        is_relativistic=False,
+        target_model_dir=args.robust_model_path
+    )
+    attack.freeze()
+    attack.eval()
+elif args.attack == 'adv_gan_blackbox':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_BB_FOLDER}/last.ckpt'
+
+    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_WB_FOLDER}/last.ckpt'
+
+    attack = AdvGAN.load_from_checkpoint(
+        adv_model_path,
+        model_num_labels=10,
+        image_nc=1,
+        box_min=0,
+        box_max=1,
+        tensorflow=False,
+        is_blackbox=True,
+        is_relativistic=False,
+        target_model_dir=args.robust_model_path
+    )
+    attack.freeze()
+    attack.eval()
+elif args.attack == 'fgsm':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FGSM_FOLDER}/last.ckpt'
+
+    attack = FGSM(target_model_dir=args.robust_model_path)
+elif args.attack == 'cw_l2':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_CW_L2_FOLDER}/last.ckpt'
+
+    attack = CW_L2(target_model_dir=args.robust_model_path)
+elif args.attack != '':
+    print("This attack is not implemented!")
+    quit()
+
 dm = MNISTDataModule(
     f'{Config.LOGS_PATH}',
     batch_size=Config.APE_GAN_BATCH_SIZE,
@@ -26,29 +87,13 @@ dm = MNISTDataModule(
     drop_last=True
 )
 
-attack = AdvGAN.load_from_checkpoint(
-    f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt',
-    model_num_labels=10, image_nc=1, box_min=0, box_max=1,
-    tensorflow=False, is_blackbox=True, is_relativistic=False,
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt')
-attack.freeze()
-attack.eval()
-
-"""
-attack = FGSM(
-            target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted/adv_trained.ckpt')
-# attack = PGD(
-            target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted/adv_trained.ckpt')
-# attack.eval()
-"""
-
 model = ApeGan(
     1,
     Config.APE_GAN_gen_loss_scale,
     Config.APE_GAN_dis_loss_scale,
     Config.APE_GAN_lr,
     attack=attack,
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt'
+    target_model_dir=args.robust_model_path
 )
 
 wandb_logger = pl_loggers.WandbLogger(
@@ -60,7 +105,7 @@ wandb_logger = pl_loggers.WandbLogger(
 wandb_logger.watch(model)
 
 checkpoint_callback = ModelCheckpoint(
-    f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/',
+    defense_model_path,
     monitor="validation_loss_generator",
     save_top_k=1,
     save_last=True,

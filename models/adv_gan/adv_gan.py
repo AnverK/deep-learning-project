@@ -300,6 +300,7 @@ class AdvGAN(LightningModule):
 
     def discriminator_loss_real_fake(self, imgs, adv_imgs):
         logits_real, pred_real = self.discriminator(imgs)
+        # TODO: Shouldn't we use detach here?
         logits_fake, pred_fake = self.discriminator(adv_imgs)
 
         real = torch.ones_like(pred_real, device=self.device)
