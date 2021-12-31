@@ -138,7 +138,7 @@ class ApeGan(LightningModule):
             """
 
             with torch.enable_grad():
-                X_adv = self.attack(X.detach())
+                X_adv = self.attack(X)
 
         perturbation, X_res = self.generate_res_imgs(X_adv)
 

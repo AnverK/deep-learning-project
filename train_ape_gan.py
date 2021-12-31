@@ -32,6 +32,20 @@ args = parser.parse_args()
 defense_model_path = args.defense_model_path
 adv_model_path = args.adv_model_path
 
+attack = AdvGAN.load_from_checkpoint(
+    adv_model_path,
+    model_num_labels=10,
+    image_nc=1,
+    box_min=0,
+    box_max=1,
+    tensorflow=False,
+    is_blackbox=True,
+    is_relativistic=False,
+    target_model_dir=args.robust_model_path
+)
+attack.freeze()
+attack.eval()
+
 if args.attack == 'adv_gan_whitebox':
     defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_WB_FOLDER}/'
 
@@ -53,7 +67,7 @@ if args.attack == 'adv_gan_whitebox':
 elif args.attack == 'adv_gan_blackbox':
     defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_BB_FOLDER}/'
 
-    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_WB_FOLDER}/last.ckpt'
+    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_BB_FOLDER}/last.ckpt'
 
     attack = AdvGAN.load_from_checkpoint(
         adv_model_path,
