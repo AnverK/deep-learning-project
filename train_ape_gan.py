@@ -26,14 +26,14 @@ parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{
 parser.add_argument("--robust-model-path", type=str,
                     default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt')
 parser.add_argument("--defense-model-path", type=str,
-                    default=f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/last.ckpt')
+                    default=f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/')
 args = parser.parse_args()
 
 defense_model_path = args.defense_model_path
 adv_model_path = args.adv_model_path
 
 if args.attack == 'adv_gan_whitebox':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_WB_FOLDER}/last.ckpt'
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_WB_FOLDER}/'
 
     adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_WB_FOLDER}/last.ckpt'
 
@@ -51,7 +51,7 @@ if args.attack == 'adv_gan_whitebox':
     attack.freeze()
     attack.eval()
 elif args.attack == 'adv_gan_blackbox':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_BB_FOLDER}/last.ckpt'
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_BB_FOLDER}/'
 
     adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_WB_FOLDER}/last.ckpt'
 
@@ -69,11 +69,11 @@ elif args.attack == 'adv_gan_blackbox':
     attack.freeze()
     attack.eval()
 elif args.attack == 'fgsm':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FGSM_FOLDER}/last.ckpt'
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FGSM_FOLDER}/'
 
     attack = FGSM(target_model_dir=args.robust_model_path)
 elif args.attack == 'cw_l2':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_CW_L2_FOLDER}/last.ckpt'
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_CW_L2_FOLDER}/'
 
     attack = CW_L2(target_model_dir=args.robust_model_path)
 elif args.attack != '':
