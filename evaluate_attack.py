@@ -21,7 +21,7 @@ if __name__ == "__main__":
     parser.add_argument("--attack", type=str, default='')
     parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt')
     parser.add_argument("--robust-model-path", type=str,
-                        default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt')
+                        default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_secret/model.ckpt')
 
     # pass empty string if you only want to evaluate attack model
     parser.add_argument("--defense-model-path", type=str,
@@ -127,13 +127,13 @@ if __name__ == "__main__":
 
     robust_model.eval()
     with torch.no_grad():
-        probs = robust_model.forward(X_adv)
+        probs = robust_model(X_adv)
         pred = torch.argmax(probs, dim=1)
         accuracy = torch.sum(pred == y) / len(y)
         print(f"Accuracy on adversarial samples is {accuracy.item()}")
 
         if eval_defense:
-            probs = robust_model.forward(X_res)
+            probs = robust_model(X_res)
             pred = torch.argmax(probs, dim=1)
             accuracy = torch.sum(pred == y) / len(y)
             print(f"Accuracy on restored samples is {accuracy.item()}")
