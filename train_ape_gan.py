@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--attack", type=str, default='adv_gan_blackbox')
 parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt')
 parser.add_argument("--robust-model-path", type=str,
-                    default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_CKPT}')
+                    default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/{Config.TARGET_MODEL_CKPT}')
 parser.add_argument("--defense-model-path", type=str,
                     default=f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/')
 args = parser.parse_args()

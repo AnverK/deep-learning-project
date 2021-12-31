@@ -2,7 +2,7 @@ class Config():
     NUM_WORKERS = 4
 
     TARGET_MODEL_BATCH_SIZE = 256
-    TARGET_MODEL_FOLDER = 'target_model/converted_adv_trained'
+    TARGET_MODEL_FOLDER = 'target_model'
     TARGET_MODEL_CKPT = 'model.ckpt'
 
     ADV_GAN_BATCH_SIZE = 256

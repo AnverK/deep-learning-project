@@ -34,8 +34,8 @@ model = AdvGAN(
     is_relativistic=False,
     is_blackbox=is_blackbox,
     tensorflow=False,
-    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_CKPT}',
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_CKPT}'
+    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/{Config.TARGET_MODEL_CKPT}',
+    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/{Config.TARGET_MODEL_CKPT}'
 )
 
 wandb_logger = pl_loggers.WandbLogger(
