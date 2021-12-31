@@ -15,11 +15,12 @@ class Config():
     APE_GAN_FOLDER = 'ape_gan'
     APE_GAN_lr = 5e-5
     APE_GAN_epochs = 5
-    # APE_GAN_gen_loss_scale=0.9
-    # APE_GAN_dis_loss_scale=0.02
+    
+    APE_GAN_gen_loss_scale=0.9
+    APE_GAN_dis_loss_scale=0.02
 
-    APE_GAN_gen_loss_scale = 0.7
-    APE_GAN_dis_loss_scale = 0.3
+    #APE_GAN_gen_loss_scale = 0.7
+    #APE_GAN_dis_loss_scale = 0.3
 
     BABOON_BATCH_SIZE = 128
     BABOON_FOLDER = 'baboon'

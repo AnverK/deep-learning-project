@@ -26,9 +26,16 @@ dm = MNISTDataModule(
 
 attack = AdvGAN.load_from_checkpoint(
     f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt',
-    model_num_labels=10, image_nc=1, box_min=0, box_max=1,
-    tensorflow=False, is_blackbox=True, is_relativistic=False,
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt')
+    model_num_labels=10, 
+    image_nc=1, 
+    box_min=0, 
+    box_max=1,
+    tensorflow=False, 
+    is_blackbox=True, 
+    is_relativistic=False,
+    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt'
+)
+
 attack.freeze()
 attack.eval()
 

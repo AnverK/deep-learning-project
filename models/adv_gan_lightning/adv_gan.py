@@ -1,5 +1,5 @@
 from .discriminator import Discriminator
-from .generator import Generator
+from .generator import Generator as Generator
 from .target_model import TargetModel
 from .student_model import StudentModel
 from .robust_tf_model import Model
@@ -287,13 +287,15 @@ class AdvGAN(LightningModule):
         # Probabilities of ground truth
         real = onehot_labels * probs
         real = torch.sum(real, dim=1)
-
+        
         # Probabilities of the remaining classes
         # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
-        other = (1 - onehot_labels) * probs - onehot_labels
-        other, _ = torch.max(other, dim=1)
+        other = (1 - onehot_labels) * probs #- onehot_labels
+        other = torch.sum(other, dim=1)
 
-        zeros = torch.zeros_like(other)
+        return (real - other + 1).mean()
+
+        zeros = torch.zeros_like(other) - 0.1
 
         loss_adv = torch.max(real - other, zeros)
         loss_adv = torch.mean(loss_adv)
