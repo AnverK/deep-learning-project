@@ -35,6 +35,8 @@ if __name__ == "__main__":
 
     adv_model_path = args.adv_model_path
 
+    target_model_dir = f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt'
+
     adv_model = AdvGAN.load_from_checkpoint(adv_model_path,
                                             model_num_labels=10,
                                             image_nc=1,
@@ -43,7 +45,7 @@ if __name__ == "__main__":
                                             tensorflow=False,
                                             is_blackbox=True,
                                             is_relativistic=False,
-                                            target_model_dir=args.robust_model_path
+                                            target_model_dir=target_model_dir
                                             )
     adv_model.freeze()
     adv_model.eval()
@@ -62,7 +64,7 @@ if __name__ == "__main__":
                                                 tensorflow=False,
                                                 is_blackbox=False,
                                                 is_relativistic=False,
-                                                target_model_dir=args.robust_model_path
+                                                target_model_dir=target_model_dir
                                                 )
         adv_model.freeze()
         adv_model.eval()
@@ -79,7 +81,7 @@ if __name__ == "__main__":
                                                 tensorflow=False,
                                                 is_blackbox=True,
                                                 is_relativistic=False,
-                                                target_model_dir=args.robust_model_path
+                                                target_model_dir=target_model_dir
                                                 )
         adv_model.freeze()
         adv_model.eval()
@@ -103,7 +105,7 @@ if __name__ == "__main__":
                                                     dis_loss_scale=Config.APE_GAN_dis_loss_scale,
                                                     lr=Config.APE_GAN_lr,
                                                     attack=adv_model,
-                                                    target_model_dir=args.robust_model_path
+                                                    target_model_dir=target_model_dir
                                                     )
 
     if args.dataset == 'mnist':
