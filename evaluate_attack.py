@@ -18,7 +18,7 @@ def check_distance(X, X_adv, eps=0.3):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--attack", type=str, default='')
+    parser.add_argument("--attack", type=str, default='adv_gan_blackbox')
     parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt')
     parser.add_argument("--robust-model-path", type=str,
                         default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_secret/model.ckpt')
@@ -49,9 +49,9 @@ if __name__ == "__main__":
     adv_model.eval()
 
     if args.attack == 'adv_gan_whitebox':
-        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_WB_FOLDER}/last.ckpt'
+        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/adv_gan_whitebox/{Config.APE_GAN_CKPT}'
 
-        adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_WB_FOLDER}/last.ckpt'
+        adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/whitebox/{Config.ADV_GAN_CKPT}'
 
         # need to pass hyperparameters, since we didn't save them in adv_gan
         adv_model = AdvGAN.load_from_checkpoint(adv_model_path,
@@ -67,9 +67,9 @@ if __name__ == "__main__":
         adv_model.freeze()
         adv_model.eval()
     elif args.attack == 'adv_gan_blackbox':
-        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_ADV_BB_FOLDER}/last.ckpt'
+        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/adv_gan_blackbox/{Config.APE_GAN_CKPT}'
 
-        adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_BB_FOLDER}/last.ckpt'
+        adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/blackbox/{Config.ADV_GAN_CKPT}'
 
         adv_model = AdvGAN.load_from_checkpoint(adv_model_path,
                                                 model_num_labels=10,
@@ -84,11 +84,11 @@ if __name__ == "__main__":
         adv_model.freeze()
         adv_model.eval()
     elif args.attack == 'fgsm':
-        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FGSM_FOLDER}/last.ckpt'
+        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/fgsm/{Config.APE_GAN_CKPT}'
 
         adv_model = FGSM(target_model_dir=args.robust_model_path)
     elif args.attack == 'cw_l2':
-        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_CW_L2_FOLDER}/last.ckpt'
+        defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/cw_l2/{Config.APE_GAN_CKPT}'
 
         adv_model = CW_L2(target_model_dir=args.robust_model_path)
     elif args.attack != '':
@@ -114,7 +114,9 @@ if __name__ == "__main__":
     X = test_data.data
     X = X / 255
     X = torch.unsqueeze(X, 1)
+
     X_adv = adv_model(X)
+    
     y = test_data.targets
     if eval_defense:
         X_res = defense_model.generate_restored(X_adv)

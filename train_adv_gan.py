@@ -59,7 +59,7 @@ callbacks = [checkpoint_callback]
 
 trainer = Trainer(
     gpus=-1,
-    max_epochs=200,
+    max_epochs=50,
     precision=16,
     callbacks=callbacks,
     benchmark=True,
