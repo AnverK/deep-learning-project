@@ -1,17 +1,17 @@
-from pl_bolts.datamodules import MNISTDataModule
-from pytorch_lightning import Trainer
-import pytorch_lightning as pl
-import torch
-from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
 import os
 
-os.environ['WANDB_SAVE_CODE'] = "true"
-
-from models.adv_gan_lightning.adv_gan import AdvGAN
-from models.adv_gan_lightning.target_model import TargetModel
+import torch
+from pl_bolts.datamodules import MNISTDataModule
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer
+from pytorch_lightning import loggers as pl_loggers
+from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
 
 from config import Config
+from models.adv_gan.adv_gan import AdvGAN
+from models.target_models.target_model import TargetModel
+
+os.environ['WANDB_SAVE_CODE'] = "true"
 
 pl.seed_everything(36)
 
@@ -25,16 +25,17 @@ dm = MNISTDataModule(
     drop_last=True
 )
 
+is_blackbox = True
 model = AdvGAN(
     model_num_labels=10,
     image_nc=1,
     box_min=0,
     box_max=1,
-    is_relativistic=True,
-    is_blackbox=True,
+    is_relativistic=False,
+    is_blackbox=is_blackbox,
     tensorflow=False,
-    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt',
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt'
+    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_CKPT}',
+    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_CKPT}'
 )
 
 wandb_logger = pl_loggers.WandbLogger(
@@ -46,9 +47,10 @@ wandb_logger = pl_loggers.WandbLogger(
 wandb_logger.watch(model)
 
 checkpoint_callback = ModelCheckpoint(
-    f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/',
+    f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/{"blackbox" if is_blackbox else "whitebox"}',
     monitor="validation_accuracy_adversarial",
     save_top_k=1,
+    filename='best',
     save_last=True,
     mode='min'
 )
