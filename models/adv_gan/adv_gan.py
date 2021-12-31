@@ -37,7 +37,7 @@ class AdvGAN(LightningModule):
             num_batches_to_log=1,
             num_samples_to_log=16,
             is_relativistic=True,
-            is_blackbox=True,
+            is_distilled=True,
             tensorflow=True,
             tf_target_model_dir='../target_models/tf/adv_trained/',
             target_model_dir='../target_models/pytorch/adv_trained.ckpt'
@@ -57,7 +57,7 @@ class AdvGAN(LightningModule):
         self.num_batches_to_log = num_batches_to_log
         self.num_samples_to_log = num_samples_to_log
         self.is_relativistic = is_relativistic
-        self.is_blackbox = is_blackbox
+        self.is_distilled = is_distilled
         self.tensorflow = tensorflow
 
         # networks
@@ -183,7 +183,7 @@ class AdvGAN(LightningModule):
         accuracy_original = accuracy(labels_original_pred, labels)
         accuracy_adversarial = accuracy(labels_adversarial_pred, labels)
 
-        if self.is_blackbox:
+        if self.is_distilled:
             labels_original_pred_student = self.student_model(imgs).argmax(1)
             labels_adversarial_pred_student = self.student_model(adv_imgs).argmax(1)
 
@@ -193,8 +193,8 @@ class AdvGAN(LightningModule):
         losses = {
             f"{stage}_accuracy_original": accuracy_original,
             f"{stage}_accuracy_adversarial": accuracy_adversarial,
-            f"{stage}_accuracy_original_student": accuracy_original_student if self.is_blackbox else None,
-            f"{stage}_accuracy_adversarial_student": accuracy_adversarial_student if self.is_blackbox else None,
+            f"{stage}_accuracy_original_student": accuracy_original_student if self.is_distilled else 0,
+            f"{stage}_accuracy_adversarial_student": accuracy_adversarial_student if self.is_distilled else 0,
         }
 
         self.log_dict(
@@ -274,7 +274,7 @@ class AdvGAN(LightningModule):
 
     def adversarial_loss(self, adv_imgs, labels):
         # Loss of fooling the target model C&W loss function:
-        if self.is_blackbox:
+        if self.is_distilled:
             preds = self.student_model(adv_imgs)
         else:
             preds = self.target_model_predict(adv_imgs)
@@ -394,14 +394,14 @@ class AdvGAN(LightningModule):
         if optimizer_idx == 1:
             optimizer.step(closure=optimizer_closure)
 
-        if self.is_blackbox and optimizer_idx == 2:
+        if self.is_distilled and optimizer_idx == 2:
             optimizer.step(closure=optimizer_closure)
 
     def configure_optimizers(self):
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=self.lr, betas=(self.b1, self.b2))
 
-        if not self.is_blackbox:
+        if not self.is_distilled:
             return [opt_g, opt_d], []
 
         opt_sm = torch.optim.Adam(self.student_model.parameters(), lr=1e-4)

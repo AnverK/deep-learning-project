@@ -25,17 +25,16 @@ dm = MNISTDataModule(
     drop_last=True
 )
 
-is_blackbox = True
 model = AdvGAN(
     model_num_labels=10,
     image_nc=1,
     box_min=0,
     box_max=1,
     is_relativistic=False,
-    is_blackbox=is_blackbox,
+    is_distilled=Config.IS_DISTILLED,
     tensorflow=False,
-    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/{Config.TARGET_MODEL_CKPT}',
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/{Config.TARGET_MODEL_CKPT}'
+    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_BLACK_BOX_FOLDER if Config.IS_BLACK_BOX else Config.TARGET_MODEL_WHITE_BOX_FOLDER}/{Config.TARGET_MODEL_CKPT}',
+    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_BLACK_BOX_FOLDER if Config.IS_BLACK_BOX else Config.TARGET_MODEL_WHITE_BOX_FOLDER}/{Config.TARGET_MODEL_CKPT}'
 )
 
 wandb_logger = pl_loggers.WandbLogger(
@@ -44,10 +43,9 @@ wandb_logger = pl_loggers.WandbLogger(
     log_model=True,
     save_dir=Config.LOGS_PATH
 )
-wandb_logger.watch(model)
 
 checkpoint_callback = ModelCheckpoint(
-    f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/{"blackbox" if is_blackbox else "whitebox"}',
+    f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/{"blackbox" if Config.IS_BLACK_BOX else "whitebox"}/{"distilled" if Config.IS_DISTILLED else "not_distilled"}',
     monitor="validation_accuracy_adversarial",
     save_top_k=1,
     filename='best',

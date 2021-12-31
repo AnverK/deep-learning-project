@@ -21,10 +21,10 @@ os.makedirs(Config.LOGS_PATH, exist_ok=True)
 os.makedirs(f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/', exist_ok=True)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--attack", type=str, default='adv_gan_blackbox')
-parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt')
+parser.add_argument("--attack", type=str, default='adv_gan_blackbox_not_distilled')
+parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/{Config.ADV_GAN_CKPT}')
 parser.add_argument("--robust-model-path", type=str,
-                    default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/{Config.TARGET_MODEL_CKPT}')
+                    default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_BLACK_BOX_FOLDER if Config.IS_BLACK_BOX else Config.TARGET_MODEL_WHITE_BOX_FOLDER}/{Config.TARGET_MODEL_CKPT}')
 parser.add_argument("--defense-model-path", type=str,
                     default=f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/')
 args = parser.parse_args()
@@ -32,10 +32,10 @@ args = parser.parse_args()
 defense_model_path = args.defense_model_path
 adv_model_path = args.adv_model_path
 
-if args.attack == 'adv_gan_whitebox':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/whitebox/'
+if args.attack == 'adv_gan_whitebox_distilled':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/adv_gan_whitebox_distilled'
 
-    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/adv_gan_whitebox/last.ckpt'
+    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/whitebox/distilled/{Config.ADV_GAN_CKPT}'
 
     attack = AdvGAN.load_from_checkpoint(
         adv_model_path,
@@ -51,10 +51,48 @@ if args.attack == 'adv_gan_whitebox':
 
     attack.freeze()
     attack.eval()
-elif args.attack == 'adv_gan_blackbox':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/adv_gan_blackbox'
+elif args.attack == 'adv_gan_whitebox_not_distilled':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/adv_gan_whitebox_not_distilled'
 
-    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/blackbox/last.ckpt'
+    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/whitebox/not_distilled/{Config.ADV_GAN_CKPT}'
+
+    attack = AdvGAN.load_from_checkpoint(
+        adv_model_path,
+        model_num_labels=10,
+        image_nc=1,
+        box_min=0,
+        box_max=1,
+        tensorflow=False,
+        is_blackbox=False,
+        is_relativistic=False,
+        target_model_dir=args.robust_model_path
+    )
+
+    attack.freeze()
+    attack.eval()
+elif args.attack == 'adv_gan_blackbox_distilled':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/adv_gan_blackbox_distilled'
+
+    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/blackbox/distilled/{Config.ADV_GAN_CKPT}'
+
+    attack = AdvGAN.load_from_checkpoint(
+        adv_model_path,
+        model_num_labels=10,
+        image_nc=1,
+        box_min=0,
+        box_max=1,
+        tensorflow=False,
+        is_blackbox=True,
+        is_relativistic=False,
+        target_model_dir=args.robust_model_path
+    )
+
+    attack.freeze()
+    attack.eval()
+elif args.attack == 'adv_gan_blackbox_not_distilled':
+    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/adv_gan_blackbox_not_distilled'
+
+    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/blackbox/not_distilled/{Config.ADV_GAN_CKPT}'
 
     attack = AdvGAN.load_from_checkpoint(
         adv_model_path,
