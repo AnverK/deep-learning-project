@@ -1,17 +1,17 @@
-from pl_bolts.datamodules import MNISTDataModule
-from pytorch_lightning import Trainer
-import pytorch_lightning as pl
-import torch
-from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
 import os
 
-os.environ['WANDB_SAVE_CODE'] = "true"
-
-from models.adv_gan_lightning.adv_gan import AdvGAN
-from models.adv_gan_lightning.target_model import TargetModel
+import torch
+from pl_bolts.datamodules import MNISTDataModule
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer
+from pytorch_lightning import loggers as pl_loggers
+from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
 
 from config import Config
+from models.adv_gan.adv_gan import AdvGAN
+from models.target_models.target_model import TargetModel
+
+os.environ['WANDB_SAVE_CODE'] = "true"
 
 pl.seed_everything(36)
 
@@ -30,11 +30,11 @@ model = AdvGAN(
     image_nc=1,
     box_min=0,
     box_max=1,
-    is_relativistic=True,
+    is_relativistic=False,
     is_blackbox=True,
     tensorflow=False,
-    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}_adv/model.ckpt',
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}_adv/model.ckpt'
+    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/adv_trained',
+    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained/model.ckpt'
 )
 
 wandb_logger = pl_loggers.WandbLogger(

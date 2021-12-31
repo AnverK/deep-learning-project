@@ -1,11 +1,11 @@
 import pytorch_lightning as pl
 import torch
 from torch import nn
+from torchmetrics.functional import accuracy
 
 from .models import MnistCNN, CifarCNN, Generator, Discriminator
-from ..adv_gan_lightning.target_model import TargetModel
+from ..target_models.target_model import TargetModel
 
-from torchmetrics.functional import accuracy
 import wandb
 
 

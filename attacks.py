@@ -1,9 +1,9 @@
-from models.adv_gan_lightning.target_model import TargetModel
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from models.target_models.target_model import TargetModel
 
 from cleverhans.torch.attacks.fast_gradient_method import fast_gradient_method
 from cleverhans.torch.attacks.projected_gradient_descent import (

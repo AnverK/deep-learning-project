@@ -2,16 +2,16 @@ import argparse
 import os
 
 import numpy as np
-import tensorflow.compat.v1 as tf
+import torch
 from torch.utils.data import DataLoader
 
-import torch
-
 from config import Config
-from models.adv_gan_lightning.robust_model import Model
-from models.adv_gan_lightning.target_model import TargetModel
+from models.target_models.robust_tf_model import Model
+from models.target_models.target_model import TargetModel
 from torchvision.datasets import mnist
 from torchvision.transforms import ToTensor
+
+import tensorflow.compat.v1 as tf
 
 tf.disable_v2_behavior()
 
@@ -74,10 +74,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # path to the original weights of the model from mnist_challenge
     parser.add_argument("--tf-checkpoint-path", type=str,
-                        default=f"{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/natural")
+                        default=f"{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/adv_trained")
     # path where to save the pytorch model
     parser.add_argument("--torch-checkpoint-path", type=str,
-                        default=f"{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_natural")
+                        default=f"{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_adv_trained")
     args = parser.parse_args()
 
     torch_model = TargetModel()

@@ -1,13 +1,13 @@
-import argparse
-
 import torch
 from torchvision import datasets
 
 from config import Config
-from models.adv_gan_lightning.adv_gan import AdvGAN
-from models.adv_gan_lightning.target_model import TargetModel
-from models.ape_gan_lightning.ape_gan import ApeGan
-import attacks
+from models.adv_gan.adv_gan import AdvGAN
+from models.ape_gan.ape_gan import ApeGan
+from models.target_models.target_model import TargetModel
+from attacks import FGSM, PGD
+
+import argparse
 
 
 def check_distance(X, X_adv, eps=0.3):
@@ -18,13 +18,13 @@ def check_distance(X, X_adv, eps=0.3):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/adv_gan_adv_whitebox/last.ckpt')
+    parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/last.ckpt')
     parser.add_argument("--robust-model-path", type=str,
                         default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_secret/model.ckpt')
 
     # pass empty string if you only want to evaluate attack model
     parser.add_argument("--defense-model-path", type=str,
-                        default=f'{Config.LOGS_PATH}/ape_gan_adv_blackbox/last.ckpt')
+                        default=f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/last.ckpt')
     # currently not used TODO
     parser.add_argument("--dataset", type=str, default='mnist')
     parser.add_argument("--eps", type=float, default=0.3)
@@ -54,9 +54,9 @@ if __name__ == "__main__":
         raise Exception("Other datasets are not supported yet")
 
     """
-    adv_model = attacks.FGSM(
+    adv_model = FGSM(
                 target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted/adv_trained.ckpt')
-    # adv_model = attacks.PGD(
+    # adv_model = PGD(
                 target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted/adv_trained.ckpt')
     # adv_model.eval()
     """

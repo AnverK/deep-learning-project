@@ -1,17 +1,18 @@
-from pl_bolts.datamodules import MNISTDataModule
-from pytorch_lightning import Trainer
-import pytorch_lightning as pl
-import torch
-from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
 import os
 
-os.environ['WANDB_SAVE_CODE'] = "true"
+import torch
+from pl_bolts.datamodules import MNISTDataModule
+import pytorch_lightning as pl
+from pytorch_lightning import Trainer
+from pytorch_lightning import loggers as pl_loggers
+from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
 
-from models.ape_gan_lightning.ape_gan import ApeGan
-from models.adv_gan_lightning.adv_gan import AdvGAN
-from models.combined.baboon import Baboon
 from config import Config
+from models.adv_gan.adv_gan import AdvGAN
+from models.ape_gan.ape_gan import ApeGan
+from models.combined.baboon import Baboon
+
+os.environ['WANDB_SAVE_CODE'] = "true"
 
 pl.seed_everything(36)
 
