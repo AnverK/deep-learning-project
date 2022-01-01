@@ -288,10 +288,14 @@ class AdvGAN(LightningModule):
         
         # Probabilities of the remaining classes
         # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
-        other = (1 - onehot_labels) * probs #- onehot_labels
+        
+        # Maximizing from ground truth like in the paper, comment out for like in other implementations
+        other = (1 - onehot_labels) * probs
         other = torch.sum(other, dim=1)
-
         return (real - other + 1).mean()
+
+        other = (1 - onehot_labels) * probs - onehot_labels
+        other, _ = torch.max(other, dim=1)
 
         zeros = torch.zeros_like(other) - 0.1
 

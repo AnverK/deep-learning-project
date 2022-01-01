@@ -3,15 +3,13 @@ class Config():
 
     TARGET_MODEL_BATCH_SIZE = 256
     TARGET_MODEL_FOLDER = 'target_model'
-
     TARGET_MODEL_WHITE_BOX_FOLDER = 'converted_secret'
     TARGET_MODEL_BLACK_BOX_FOLDER = 'converted_adv_trained'
-
     TARGET_MODEL_CKPT = 'model.ckpt'
 
     ADV_GAN_BATCH_SIZE = 256
     ADV_GAN_FOLDER = 'adv_gan'
-    ADV_GAN_CKPT = 'last.ckpt'
+    ADV_GAN_CKPT = 'best.ckpt'
 
     IS_BLACK_BOX = True
     IS_DISTILLED = False
@@ -30,7 +28,7 @@ class Config():
     APE_GAN_gen_loss_scale=0.9
     APE_GAN_dis_loss_scale=0.02
 
-    APE_GAN_CKPT = 'last.ckpt'
+    APE_GAN_CKPT = 'best.ckpt'
 
     BABOON_BATCH_SIZE = 128
     BABOON_FOLDER = 'baboon'
