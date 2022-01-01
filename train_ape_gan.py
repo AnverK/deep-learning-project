@@ -75,7 +75,7 @@ wandb_logger = pl_loggers.WandbLogger(
 
 checkpoint_callback = ModelCheckpoint(
     DEFENSE_MODEL_FOLDER,
-    monitor="validation_accuracy_adversarial",
+    monitor="validation_accuracy_restored",
     save_top_k=1,
     save_last=True,
     filename='best',
