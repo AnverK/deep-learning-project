@@ -9,6 +9,7 @@ from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
 
 from config import Config
+from create_paths import CreatePaths
 from models.adv_gan.adv_gan import AdvGAN
 from models.ape_gan.ape_gan import ApeGan
 from attacks import FGSM, PGD
@@ -21,43 +22,30 @@ os.makedirs(Config.LOGS_PATH, exist_ok=True)
 os.makedirs(f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/', exist_ok=True)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--attack", type=str, default='adv_gan_blackbox_not_distilled')
-parser.add_argument("--adv-model-path", type=str, default=f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/{Config.ADV_GAN_CKPT}')
-parser.add_argument("--robust-model-path", type=str,
-                    default=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_BLACK_BOX_FOLDER if Config.IS_BLACK_BOX else Config.TARGET_MODEL_WHITE_BOX_FOLDER}/{Config.TARGET_MODEL_CKPT}')
-parser.add_argument("--defense-model-path", type=str,
-                    default=f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/')
+parser.add_argument("--adv-model", type=str, default='adv_gan')
 args = parser.parse_args()
 
-defense_model_path = args.defense_model_path
-adv_model_path = args.adv_model_path
+PathCreator = CreatePaths(args.adv_model)
+TARGET_MODEL_PATH, ADV_MODEL_FOLDER, DEFENSE_MODEL_FOLDER = PathCreator.create_paths()
 
-if args.attack == 'adv_gan':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/adv_gan_{"blackbox" if Config.IS_BLACK_BOX else "whitebox"}_{"distilled" if Config.IS_DISTILLED else "not_distilled"}'
+if args.adv_model == 'adv_gan':
+    ADV_MODEL_PATH = f'{ADV_MODEL_FOLDER}/{Config.ADV_GAN_CKPT}'
 
-    adv_model_path = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/{"blackbox" if Config.IS_BLACK_BOX else "whitebox"}/{"distilled" if Config.IS_DISTILLED else "not_distilled"}/{Config.ADV_GAN_CKPT}'
-
-    attack = AdvGAN.load_from_checkpoint(
-        adv_model_path,
-        model_num_labels=10,
-        image_nc=1,
-        box_min=0,
-        box_max=1,
-        tensorflow=False,
+    adv_model = AdvGAN.load_from_checkpoint(
+        ADV_MODEL_PATH,
         is_distilled=Config.IS_DISTILLED,
-        is_relativistic=False,
-        target_model_dir=args.robust_model_path
+        target_model_dir=TARGET_MODEL_PATH
     )
 
-    attack.freeze()
-elif args.attack == 'fgsm':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/fgsm'
+    adv_model.freeze()
+    adv_model.eval()
 
-    attack = FGSM(target_model_dir=args.robust_model_path)
-elif args.attack == 'pgd':
-    defense_model_path = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/pgd'
+elif args.adv_model == 'fgsm':
+    adv_model = FGSM(target_model_dir=TARGET_MODEL_PATH)
 
-    attack = PGD(target_model_dir=args.robust_model_path)
+elif args.adv_model == 'pgd':
+    adv_model = PGD(target_model_dir=TARGET_MODEL_PATH)
+
 else:
     print("This attack is not implemented!")
     quit()
@@ -74,8 +62,8 @@ model = ApeGan(
     Config.APE_GAN_gen_loss_scale,
     Config.APE_GAN_dis_loss_scale,
     Config.APE_GAN_lr,
-    attack=attack,
-    target_model_dir=args.robust_model_path
+    attack=adv_model,
+    target_model_dir=TARGET_MODEL_PATH
 )
 
 wandb_logger = pl_loggers.WandbLogger(
@@ -86,7 +74,7 @@ wandb_logger = pl_loggers.WandbLogger(
 )
 
 checkpoint_callback = ModelCheckpoint(
-    defense_model_path,
+    DEFENSE_MODEL_FOLDER,
     monitor="validation_accuracy_adversarial",
     save_top_k=1,
     save_last=True,
@@ -102,7 +90,7 @@ trainer = Trainer(
     precision=16,
     callbacks=callbacks,
     benchmark=True,
-    num_sanity_val_steps = 2,
+    num_sanity_val_steps=2,
     logger=wandb_logger,
 )
 

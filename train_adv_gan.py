@@ -8,6 +8,7 @@ from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
 
 from config import Config
+from create_paths import CreatePaths
 from models.adv_gan.adv_gan import AdvGAN
 from models.target_models.target_model import TargetModel
 
@@ -18,6 +19,9 @@ pl.seed_everything(36)
 os.makedirs(Config.LOGS_PATH, exist_ok=True)
 os.makedirs(f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/', exist_ok=True)
 
+PathCreator = CreatePaths()
+TARGET_MODEL_PATH, ADV_MODEL_FOLDER, _ = PathCreator.create_paths()
+
 dm = MNISTDataModule(
     f'{Config.LOGS_PATH}',
     batch_size=Config.ADV_GAN_BATCH_SIZE,
@@ -26,15 +30,8 @@ dm = MNISTDataModule(
 )
 
 model = AdvGAN(
-    model_num_labels=10,
-    image_nc=1,
-    box_min=0,
-    box_max=1,
-    is_relativistic=False,
     is_distilled=Config.IS_DISTILLED,
-    tensorflow=False,
-    tf_target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_BLACK_BOX_FOLDER if Config.IS_BLACK_BOX else Config.TARGET_MODEL_WHITE_BOX_FOLDER}/{Config.TARGET_MODEL_CKPT}',
-    target_model_dir=f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/{Config.TARGET_MODEL_BLACK_BOX_FOLDER if Config.IS_BLACK_BOX else Config.TARGET_MODEL_WHITE_BOX_FOLDER}/{Config.TARGET_MODEL_CKPT}'
+    target_model_dir=TARGET_MODEL_PATH
 )
 
 wandb_logger = pl_loggers.WandbLogger(
@@ -45,7 +42,7 @@ wandb_logger = pl_loggers.WandbLogger(
 )
 
 checkpoint_callback = ModelCheckpoint(
-    f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/{"blackbox" if Config.IS_BLACK_BOX else "whitebox"}/{"distilled" if Config.IS_DISTILLED else "not_distilled"}',
+    ADV_MODEL_FOLDER,
     monitor="validation_accuracy_adversarial",
     save_top_k=1,
     filename='best',

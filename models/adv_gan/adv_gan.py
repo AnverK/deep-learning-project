@@ -27,18 +27,18 @@ def weights_init(m):
 class AdvGAN(LightningModule):
     def __init__(
             self,
-            model_num_labels,
-            image_nc,
-            box_min,
-            box_max,
+            model_num_labels=10,
+            image_nc=1,
+            box_min=0,
+            box_max=1,
             lr: float = 1e-3,
             b1: float = 0.5,
             b2: float = 0.999,
             num_batches_to_log=1,
             num_samples_to_log=16,
-            is_relativistic=True,
-            is_distilled=True,
-            tensorflow=True,
+            is_relativistic=False,
+            is_distilled=False,
+            tensorflow=False,
             tf_target_model_dir='../target_models/tf/adv_trained/',
             target_model_dir='../target_models/pytorch/adv_trained.ckpt'
     ):
@@ -285,10 +285,10 @@ class AdvGAN(LightningModule):
         # Probabilities of ground truth
         real = onehot_labels * probs
         real = torch.sum(real, dim=1)
-        
+
         # Probabilities of the remaining classes
         # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
-        
+
         # Maximizing from ground truth like in the paper, comment out for like in other implementations
         other = (1 - onehot_labels) * probs
         other = torch.sum(other, dim=1)
