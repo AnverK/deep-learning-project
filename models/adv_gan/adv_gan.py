@@ -91,7 +91,7 @@ class AdvGAN(LightningModule):
         self.C = 0.1
         # To scale the importance of losses
         self.gen_lambda = 1
-        self.adv_lambda = 1280
+        self.adv_lambda = 2000
         self.pert_lambda = 5
 
         self.epoch_decay = 500
@@ -282,30 +282,8 @@ class AdvGAN(LightningModule):
         probs = F.softmax(preds, dim=1)
         onehot_labels = torch.eye(self.model_num_labels, device=self.device)[labels]
 
-        # Probabilities of ground truth
-        real = onehot_labels * probs
-        real = torch.sum(real, dim=1)
-
-        # Probabilities of the remaining classes
-        # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
-
-        # Maximizing from ground truth like in the paper, comment out for like in other implementations
-        other = (1 - onehot_labels) * probs        
-        other = torch.sum(other, dim=1)
-
-        return ((real - other).mean() + 1) / 2
-
-        zeros = torch.zeros_like(other)
-
-        other = (1 - onehot_labels) * probs - onehot_labels
-        other, _ = torch.max(other, dim=1)
-
-        zeros = torch.zeros_like(other) - 0.1
-
-        loss_adv = torch.max(real - other, zeros)
-        loss_adv = torch.mean(loss_adv)
-
-        return loss_adv
+        _, second_best = torch.max((1 - onehot_labels) * probs, dim=1)
+        return F.cross_entropy(probs, second_best)
 
     def discriminator_loss_real_fake(self, imgs, adv_imgs):
         logits_real, pred_real = self.discriminator(imgs)
