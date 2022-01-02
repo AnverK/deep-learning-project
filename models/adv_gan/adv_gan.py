@@ -91,7 +91,7 @@ class AdvGAN(LightningModule):
         self.C = 0.1
         # To scale the importance of losses
         self.gen_lambda = 1
-        self.adv_lambda = 150
+        self.adv_lambda = 1280
         self.pert_lambda = 5
 
         self.epoch_decay = 500
@@ -290,9 +290,12 @@ class AdvGAN(LightningModule):
         # other, _ = torch.max((1 - onehot_labels) * probs - onehot_labels * 10000, dim=1)
 
         # Maximizing from ground truth like in the paper, comment out for like in other implementations
-        other = (1 - onehot_labels) * probs
+        other = (1 - onehot_labels) * probs        
         other = torch.sum(other, dim=1)
-        return (real - other + 1).mean()
+
+        return ((real - other).mean() + 1) / 2
+
+        zeros = torch.zeros_like(other)
 
         other = (1 - onehot_labels) * probs - onehot_labels
         other, _ = torch.max(other, dim=1)
