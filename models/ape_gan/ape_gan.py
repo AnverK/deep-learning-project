@@ -52,8 +52,10 @@ class ApeGan(LightningModule):
 
         self.attack_batches = []
 
-    def forward(self, z):
-        return self.generator(z)
+    def forward(self, imgs):
+        perturbation, res_imgs = self.generate_res_imgs(imgs)
+
+        return res_imgs
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         X, X_adv = batch
@@ -106,7 +108,7 @@ class ApeGan(LightningModule):
 
     def generate_res_imgs(self, imgs):
         perturbation = self.generator(imgs)
-
+        
         res_imgs = perturbation + imgs
         res_imgs = torch.clamp(res_imgs, self.box_min, self.box_max)
 
