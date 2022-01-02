@@ -11,6 +11,10 @@ from models.ape_gan.ape_gan import ApeGan
 from models.target_models.target_model import TargetModel
 from attacks import FGSM, PGD
 
+import pytorch_lightning as pl
+
+pl.seed_everything(51)
+
 
 def check_distance(X, X_adv, eps=0.3):
     norm = torch.max(torch.abs(X - X_adv))
@@ -23,6 +27,8 @@ if __name__ == "__main__":
     parser.add_argument("--adv-model", type=str, default='adv_gan')
     parser.add_argument("--attack", type=str, default='')
     parser.add_argument("--no-eval-defense", default=False, action='store_true')
+    parser.add_argument("--attack-is-distilled", default=False, action='store_true')
+    parser.add_argument("--defense-is-distilled", default=False, action='store_true')
 
     # currently not used TODO
     parser.add_argument("--dataset", type=str, default='mnist')
@@ -32,7 +38,7 @@ if __name__ == "__main__":
     if args.attack == '':
         args.attack = args.adv_model
 
-    PathCreator = CreatePaths(args.adv_model)
+    PathCreator = CreatePaths(args.adv_model, is_distilled=args.defense_is_distilled)
     TARGET_MODEL_PATH, ADV_MODEL_FOLDER, DEFENSE_MODEL_FOLDER = PathCreator.create_paths()
 
     ROBUST_MODEL_PATH = f'{Config.LOGS_PATH}/{Config.TARGET_MODEL_FOLDER}/converted_secret/model.ckpt'
@@ -41,7 +47,7 @@ if __name__ == "__main__":
         ADV_MODEL_PATH = f'{ADV_MODEL_FOLDER}/{Config.ADV_GAN_CKPT}'
 
         adv_model = AdvGAN.load_from_checkpoint(ADV_MODEL_PATH,
-                                                is_distilled=Config.IS_DISTILLED,
+                                                is_distilled=args.defense_is_distilled,
                                                 target_model_dir=TARGET_MODEL_PATH
                                                 )
 
@@ -78,14 +84,14 @@ if __name__ == "__main__":
     PathCreator = CreatePaths(
         adv_model=args.attack,
         is_blackbox=Config.IS_BLACK_BOX,
-        is_distilled=Config.IS_DISTILLED)
+        is_distilled=args.attack_is_distilled)
     TARGET_MODEL_PATH, ADV_MODEL_FOLDER, DEFENSE_MODEL_FOLDER_ATTACK = PathCreator.create_paths()
 
     if args.attack == 'adv_gan':
         ADV_MODEL_PATH = f'{ADV_MODEL_FOLDER}/{Config.ADV_GAN_CKPT}'
 
         attack = AdvGAN.load_from_checkpoint(ADV_MODEL_PATH,
-                                             is_distilled=Config.IS_DISTILLED,
+                                             is_distilled=args.attack_is_distilled,
                                              target_model_dir=TARGET_MODEL_PATH
                                              )
 
@@ -110,7 +116,7 @@ if __name__ == "__main__":
 
     y = test_data.targets
     if eval_defense:
-        X_res = defense_model.generate_restored(X_adv)
+        X_res = defense_model(X_adv)
 
     if not check_distance(X, X_adv, eps=args.eps):
         raise Exception("Adversarial samples has too large distance from original samples")
