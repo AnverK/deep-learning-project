@@ -69,6 +69,7 @@ model = ApeGan(
 wandb_logger = pl_loggers.WandbLogger(
     project='deep-learning',
     group='ape_gan',
+    name=f'{args.adv_model}-{"blackbox" if Config.IS_BLACK_BOX else "whitebox"}{"-distilled" if Config.IS_DISTILLED else ""}',
     log_model=True,
     save_dir=Config.LOGS_PATH
 )
