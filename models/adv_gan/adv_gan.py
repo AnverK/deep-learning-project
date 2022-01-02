@@ -91,7 +91,7 @@ class AdvGAN(LightningModule):
         self.C = 0.1
         # To scale the importance of losses
         self.gen_lambda = 1
-        self.adv_lambda = 2000
+        self.adv_lambda = 2500
         self.pert_lambda = 5
 
         self.epoch_decay = 500
