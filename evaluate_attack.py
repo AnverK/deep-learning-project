@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import torch
 from torchvision import datasets
@@ -74,8 +75,11 @@ if __name__ == "__main__":
     else:
         raise Exception("Other datasets are not supported yet")
 
-    PathCreator = CreatePaths(args.attack)
-    TARGET_MODEL_PATH, ADV_MODEL_FOLDER, _ = PathCreator.create_paths()
+    PathCreator = CreatePaths(
+        adv_model=args.attack,
+        is_blackbox=Config.IS_BLACK_BOX,
+        is_distilled=Config.IS_DISTILLED)
+    TARGET_MODEL_PATH, ADV_MODEL_FOLDER, DEFENSE_MODEL_FOLDER_ATTACK = PathCreator.create_paths()
 
     if args.attack == 'adv_gan':
         ADV_MODEL_PATH = f'{ADV_MODEL_FOLDER}/{Config.ADV_GAN_CKPT}'
@@ -113,8 +117,11 @@ if __name__ == "__main__":
 
     robust_model = TargetModel()
     robust_model.load_state_dict(torch.load(ROBUST_MODEL_PATH))
-
     robust_model.eval()
+
+    print(f"Adversarial examples are generated from {os.path.basename(os.path.normpath(DEFENSE_MODEL_FOLDER_ATTACK))}")
+    print(f"APE-GAN was trained on {os.path.basename(os.path.normpath(DEFENSE_MODEL_FOLDER))} \n")
+
     with torch.no_grad():
         probs = robust_model(X_adv)
         pred = torch.argmax(probs, dim=1)
