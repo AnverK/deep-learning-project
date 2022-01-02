@@ -7,6 +7,7 @@ from torchvision import datasets
 from config import Config
 from create_paths import CreatePaths
 from models.adv_gan.adv_gan import AdvGAN
+from models.adv_gan.adv_gan_reverse import AdvGAN as AdvGANReverse
 from models.ape_gan.ape_gan import ApeGan
 from models.target_models.target_model import TargetModel
 from attacks import FGSM, PGD
@@ -29,6 +30,9 @@ if __name__ == "__main__":
     parser.add_argument("--no-eval-defense", default=False, action='store_true')
     parser.add_argument("--attack-is-distilled", default=False, action='store_true')
     parser.add_argument("--defense-is-distilled", default=False, action='store_true')
+    
+    parser.add_argument("--def-model", type=str, default='ape_gan')
+    parser.add_argument("--def_attack-is-distilled", default=False, action='store_true')
 
     # currently not used TODO
     parser.add_argument("--dataset", type=str, default='mnist')
@@ -66,15 +70,23 @@ if __name__ == "__main__":
 
     eval_defense = not args.no_eval_defense
     if eval_defense:
-        DEFENSE_MODEL_PATH = f'{DEFENSE_MODEL_FOLDER}/{Config.APE_GAN_CKPT}'
-        defense_model = ApeGan.load_from_checkpoint(DEFENSE_MODEL_PATH,
-                                                    in_ch=1,
-                                                    gen_loss_scale=Config.APE_GAN_gen_loss_scale,
-                                                    dis_loss_scale=Config.APE_GAN_dis_loss_scale,
-                                                    lr=Config.APE_GAN_lr,
-                                                    attack=adv_model,
-                                                    target_model_dir=TARGET_MODEL_PATH
-                                                    )
+        if args.def_model == 'ape_gan':
+            DEFENSE_MODEL_PATH = f'{DEFENSE_MODEL_FOLDER}/{Config.APE_GAN_CKPT}'
+            defense_model = ApeGan.load_from_checkpoint(DEFENSE_MODEL_PATH,
+                                                        in_ch=1,
+                                                        gen_loss_scale=Config.APE_GAN_gen_loss_scale,
+                                                        dis_loss_scale=Config.APE_GAN_dis_loss_scale,
+                                                        lr=Config.APE_GAN_lr,
+                                                        attack=adv_model,
+                                                        target_model_dir=TARGET_MODEL_PATH
+                                                        )
+        elif args.def_model == 'adv_gan_reverse':
+            DEFENSE_MODEL_PATH = f'{Config.LOGS_PATH}/adv_gan_reversed/{args.adv_model}{"-blackbox" if Config.IS_BLACK_BOX else "-whitebox"}{"-attack_is_distilled" if args.def_attack_is_distilled else ""}{"-defense_is_distilled" if args.defense_is_distilled else ""}/last.ckpt'
+            defense_model = AdvGANReverse.load_from_checkpoint(DEFENSE_MODEL_PATH,
+                                                        is_distilled=args.def_attack_is_distilled,
+                target_model_dir=TARGET_MODEL_PATH,
+                attack=adv_model
+            )
 
     if args.dataset == 'mnist':
         test_data = datasets.MNIST('mnist', train=False, download=True)
@@ -128,14 +140,24 @@ if __name__ == "__main__":
     print(f"Adversarial examples are generated from {os.path.basename(os.path.normpath(DEFENSE_MODEL_FOLDER_ATTACK))}")
     print(f"APE-GAN was trained on {os.path.basename(os.path.normpath(DEFENSE_MODEL_FOLDER))} \n")
 
-    with torch.no_grad():
-        probs = robust_model(X_adv)
-        pred = torch.argmax(probs, dim=1)
-        accuracy = torch.sum(pred == y) / len(y)
-        print(f"Accuracy on adversarial samples is {accuracy.item()}")
+    with open("evaluate_results.txt", "a") as file:
+        file.write(f'{os.path.basename(os.path.normpath(DEFENSE_MODEL_FOLDER_ATTACK))}\n')
+        file.write(f'{os.path.basename(os.path.normpath(DEFENSE_MODEL_FOLDER))}\n')
 
-        if eval_defense:
-            probs = robust_model(X_res)
+        with torch.no_grad():
+            probs = robust_model(X_adv)
             pred = torch.argmax(probs, dim=1)
+            
             accuracy = torch.sum(pred == y) / len(y)
-            print(f"Accuracy on restored samples is {accuracy.item()}")
+            
+            print(f"Accuracy on adversarial samples is {accuracy.item()}")
+            file.write(f'{accuracy.item()}\n')
+
+            if eval_defense:
+                probs = robust_model(X_res)
+                pred = torch.argmax(probs, dim=1)
+                accuracy = torch.sum(pred == y) / len(y)
+                print(f"Accuracy on restored samples is {accuracy.item()}")
+                file.write(f'{accuracy.item()}\n')
+
+        file.write(f'\n')
