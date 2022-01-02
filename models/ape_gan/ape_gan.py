@@ -8,6 +8,13 @@ from ..target_models.target_model import TargetModel
 
 import wandb
 
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1 or classname.find('Linear') != -1:
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
 
 class ApeGan(LightningModule):
     def __init__(
@@ -30,6 +37,9 @@ class ApeGan(LightningModule):
 
         self.generator = Generator(in_ch)
         self.discriminator = Discriminator(in_ch)
+
+        self.generator.apply(weights_init)
+        self.discriminator.apply(weights_init)
 
         self.attack = attack
 
@@ -108,8 +118,8 @@ class ApeGan(LightningModule):
 
     def generate_res_imgs(self, imgs):
         perturbation = self.generator(imgs)
-        
-        res_imgs = perturbation + imgs
+
+        res_imgs = torch.clamp(perturbation, -0.3, 0.3) + imgs
         res_imgs = torch.clamp(res_imgs, self.box_min, self.box_max)
 
         return perturbation, res_imgs
