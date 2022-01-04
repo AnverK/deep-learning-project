@@ -25,7 +25,7 @@ class CreatePaths:
         adv_model_folder = f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}'
         defense_model_folder = f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}'
 
-        if self.adv_model == 'adv_gan': 
+        if self.adv_model == 'adv_gan':
             if self.is_blackbox:
                 adv_model_folder = f'{adv_model_folder}/blackbox'
                 defense_model_folder = f'{defense_model_folder}/adv_gan_blackbox'

@@ -47,7 +47,7 @@ def load_weights(sess, torch_model):
 def compare_models(tf_model, torch_model):
     torch_model.freeze()
     torch_model.eval()
-    dm = mnist.MNIST('mnist', download=False, train=False, transform=ToTensor())
+    dm = mnist.MNIST('mnist', download=True, train=False, transform=ToTensor())
     dl = DataLoader(dm, 10000)
     with torch.no_grad():
         for x, y in dl:

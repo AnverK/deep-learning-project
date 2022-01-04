@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import torch
@@ -5,62 +6,77 @@ from pl_bolts.datamodules import MNISTDataModule
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from config import Config
 from create_paths import CreatePaths
 from models.adv_gan.adv_gan import AdvGAN
-from models.target_models.target_model import TargetModel
 
 os.environ['WANDB_SAVE_CODE'] = "true"
 
 pl.seed_everything(36)
 
-os.makedirs(Config.LOGS_PATH, exist_ok=True)
-os.makedirs(f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/', exist_ok=True)
+device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
 
-PathCreator = CreatePaths()
-TARGET_MODEL_PATH, ADV_MODEL_FOLDER, _ = PathCreator.create_paths()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--is-blackbox", default=False, action='store_true')
+    parser.add_argument("--is-distilled", default=False, action='store_true')
 
-dm = MNISTDataModule(
-    f'{Config.LOGS_PATH}',
-    batch_size=Config.ADV_GAN_BATCH_SIZE,
-    num_workers=Config.NUM_WORKERS,
-    drop_last=True
-)
+    args = parser.parse_args()
 
-model = AdvGAN(
-    is_distilled=Config.IS_DISTILLED,
-    target_model_dir=TARGET_MODEL_PATH
-)
+    os.makedirs(Config.LOGS_PATH, exist_ok=True)
+    os.makedirs(f'{Config.LOGS_PATH}/{Config.ADV_GAN_FOLDER}/', exist_ok=True)
 
-wandb_logger = pl_loggers.WandbLogger(
-    project='deep-learning',
-    group='adv_gan',
-    name=f'{"blackbox" if Config.IS_BLACK_BOX else "whitebox"}{"-distilled" if Config.IS_DISTILLED else ""}',
-    log_model=True,
-    save_dir=Config.LOGS_PATH
-)
+    PathCreator = CreatePaths(adv_model='adv_gan', is_blackbox=args.is_blackbox, is_distilled=args.is_distilled)
+    TARGET_MODEL_PATH, ADV_MODEL_FOLDER, _ = PathCreator.create_paths()
 
-checkpoint_callback = ModelCheckpoint(
-    ADV_MODEL_FOLDER,
-    monitor="validation_accuracy_adversarial",
-    save_top_k=1,
-    filename='best',
-    save_last=True,
-    mode='min'
-)
+    dm = MNISTDataModule(
+        f'{Config.LOGS_PATH}',
+        batch_size=Config.ADV_GAN_BATCH_SIZE,
+        num_workers=Config.NUM_WORKERS,
+        drop_last=True
+    )
 
-callbacks = [checkpoint_callback]
+    model = AdvGAN(
+        is_distilled=args.is_distilled,
+        target_model_dir=TARGET_MODEL_PATH
+    )
 
-trainer = Trainer(
-    gpus=-1,
-    max_epochs=50,
-    precision=16,
-    callbacks=callbacks,
-    benchmark=True,
-    num_sanity_val_steps=2,
-    logger=wandb_logger,
-)
+    wandb_logger = pl_loggers.WandbLogger(
+        project='deep-learning',
+        group='adv_gan',
+        name=f'{"blackbox" if args.is_blackbox else "whitebox"}{"-distilled" if args.is_distilled else ""}',
+        log_model=True,
+        save_dir=Config.LOGS_PATH
+    )
 
-trainer.fit(model, dm)
+    checkpoint_callback = ModelCheckpoint(
+        ADV_MODEL_FOLDER,
+        monitor="validation_accuracy_adversarial",
+        save_top_k=1,
+        filename='best',
+        save_last=True,
+        mode='min'
+    )
+
+    callbacks = [checkpoint_callback]
+
+    if device == 'cpu':
+        gpus = None
+        precision = 32
+    else:
+        gpus = -1
+        precision = 16
+
+    trainer = Trainer(
+        gpus=gpus,
+        max_epochs=50,
+        precision=precision,
+        callbacks=callbacks,
+        benchmark=True,
+        num_sanity_val_steps=2,
+        logger=wandb_logger,
+    )
+
+    trainer.fit(model, dm)

@@ -3,10 +3,11 @@ import torch.nn as nn
 from torchmetrics.functional import accuracy
 from pytorch_lightning import LightningModule
 
-from .models import MnistCNN, CifarCNN, Generator, Discriminator
+from .models import Generator, Discriminator
 from ..target_models.target_model import TargetModel
 
 import wandb
+
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -15,6 +16,7 @@ def weights_init(m):
     elif classname.find('BatchNorm') != -1:
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
+
 
 class ApeGan(LightningModule):
     def __init__(

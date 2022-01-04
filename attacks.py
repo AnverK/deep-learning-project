@@ -1,12 +1,10 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from models.target_models.target_model import TargetModel
 
 from cleverhans.torch.attacks.fast_gradient_method import fast_gradient_method
-from cleverhans.torch.attacks.carlini_wagner_l2 import carlini_wagner_l2
 from cleverhans.torch.attacks.projected_gradient_descent import projected_gradient_descent
 
 
@@ -78,22 +76,3 @@ class PGD(nn.Module):
         )
 
         return imgs_pgd
-
-
-class CW_L2(nn.Module):
-    def __init__(self,
-                 n_classes=10,
-                 target_model_dir='../target_models/pytorch/adv_trained.ckpt'):
-        super(CW_L2, self).__init__()
-
-        self.n_classes = n_classes
-
-        self.target_model = TargetModel()
-        self.target_model.load_state_dict(torch.load(target_model_dir))
-        self.target_model.freeze()
-        self.target_model.eval()
-
-    def forward(self, imgs):
-        imgs_cw_l2 = carlini_wagner_l2(self.target_model, imgs, self.n_classes)
-
-        return imgs_cw_l2

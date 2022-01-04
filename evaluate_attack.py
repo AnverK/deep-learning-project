@@ -1,5 +1,4 @@
 import argparse
-import os
 
 import torch
 from torchvision import datasets
@@ -7,7 +6,6 @@ from torchvision import datasets
 from config import Config
 from create_paths import CreatePaths
 from models.adv_gan.adv_gan import AdvGAN
-# from models.adv_gan.adv_gan_reverse import AdvGAN as AdvGANReverse
 from models.ape_gan.ape_gan import ApeGan
 from models.target_models.target_model import TargetModel
 from attacks import FGSM, PGD
@@ -45,16 +43,9 @@ def load_attack(adv_model_type, target_model_folder=None, adv_model_folder=None)
     return adv_model
 
 
-def load_defense(def_model_type, target_model_folder=None, defense_model_folder=None):
-    if def_model_type == 'ape_gan':
-        defense_model_path = f'{defense_model_folder}/{Config.APE_GAN_CKPT}'
-        defense_model = ApeGan.load_from_checkpoint(defense_model_path, strict=False)
-    elif def_model_type == 'adv_gan_reverse':
-        defense_model_path = f'{defense_model_folder}/last.ckpt'
-        defense_model = AdvGANReverse.load_from_checkpoint(defense_model_path)
-    else:
-        print("This attack is not implemented!")
-        return None
+def load_defense(defense_model_folder=None):
+    defense_model_path = f'{defense_model_folder}/{Config.APE_GAN_CKPT}'
+    defense_model = ApeGan.load_from_checkpoint(defense_model_path, strict=False)
     return defense_model
 
 
@@ -83,23 +74,44 @@ def evaluate(X, y, attack_model, defense_model=None):
     return adv_accuracy, res_accuracy
 
 
+def describe_adversarial_model(adv_model, is_whitebox, is_distilled):
+    wb = 'whitebox (secret)' if is_whitebox else "blacbkox (adv_trained)"
+    dist = 'distilled' if is_distilled else ''
+    if adv_model == 'adv_gan':
+        return f'AdvGAN with {dist} {wb} target model'
+    elif adv_model == 'fgsm':
+        return f'FGSM with {wb} target model'
+    elif adv_model == 'pgd':
+        return f'PGD with {wb} target model'
+    else:
+        print("This attack is not implemented!")
+        return None
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--adv-model", type=str, default='adv_gan')
-    parser.add_argument("--def-attack-model", type=str, default='adv_gan')
-    parser.add_argument("--def-model", type=str, default='ape_gan')
-    parser.add_argument("--no-eval-defense", default=False, action='store_true')
+    parser.add_argument("--adv-model", type=str, default='adv_gan',
+                        help='Type of the attack model. Supported values: [adv_gan, fgsm, pgd]')
+    parser.add_argument("--def-attack-model", type=str, default='adv_gan',
+                        help='Type of the model used to train APE-GAN. Supported values: [adv_gan, fgsm, pgd]')
+    parser.add_argument("--no-eval-defense", default=False, action='store_true',
+                        help='If specified, only attack will be evaluated')
 
-    parser.add_argument("--attack-is-distilled", default=False, action='store_true')
-    parser.add_argument("--attack-is-blackbox", default=False, action='store_true')
+    parser.add_argument("--attack-is-distilled", default=False, action='store_true',
+                        help='Specifies that attack uses distilled model. Only matters when adv-model=adv_gan')
+    parser.add_argument("--attack-is-blackbox", default=False, action='store_true',
+                        help='Specified that attack uses adversarially trained model. Otherwise, it uses secret model')
 
-    parser.add_argument("--def-attack-is-distilled", default=False, action='store_true')
-    parser.add_argument("--def-attack-is-blackbox", default=False, action='store_true')
+    parser.add_argument("--def-attack-is-distilled", default=False, action='store_true',
+                        help='Specifies that the model attacking APE-GAN uses distilled model. '
+                             'Only matters when def-attack-model=adv_gan')
+    parser.add_argument("--def-attack-is-blackbox", default=False, action='store_true',
+                        help='Specifies that the model attacking APE-GAN uses adversarially trained model.')
 
-    # currently not used TODO
-    parser.add_argument("--dataset", type=str, default='mnist')
-
-    parser.add_argument("--eps", type=float, default=0.3)
+    parser.add_argument("--eps", type=float, default=0.3,
+                        help='Specifies maximum infinite norm of adversarial perturbations. '
+                             'Note that this will only applied to evaluation: '
+                             'the model will not be retrained for new epsilon.')
     args = parser.parse_args()
 
     adv_path_creator = CreatePaths(args.adv_model, args.attack_is_blackbox, args.attack_is_distilled)
@@ -110,31 +122,29 @@ if __name__ == "__main__":
     if eval_defense:
         def_path_creator = CreatePaths(args.adv_model, args.def_attack_is_blackbox, args.def_attack_is_distilled)
         _, _, defense_model_folder = def_path_creator.create_paths()
-        defense_model = load_defense(args.def_model, defense_model_folder=defense_model_folder)
+        defense_model = load_defense(defense_model_folder=defense_model_folder)
     else:
         defense_model = None
 
-    if args.dataset == 'mnist':
-        test_data = datasets.MNIST('mnist', train=False, download=True)
-    else:
-        raise Exception("Other datasets are not supported yet")
-
+    test_data = datasets.MNIST('mnist', train=False, download=True)
     X = test_data.data
     X = X / 255
     X = torch.unsqueeze(X, 1)
     y = test_data.targets
     adv_accuracy, res_accuracy = evaluate(X, y, attack_model, defense_model)
 
-    print(f"Adversarial examples are generated from {os.path.basename(os.path.normpath(adv_model_folder))}")
+    attack_desc = describe_adversarial_model(args.adv_model, args.attack_is_blackbox, args.attack_is_distilled)
+    print(f"Adversarial examples are generated by {attack_desc}")
     if eval_defense:
-        print(f"APE-GAN was trained on {os.path.basename(os.path.normpath(defense_model_folder))} \n")
+        def_desc = describe_adversarial_model(args.adv_model, args.def_attack_is_blackbox, args.def_attack_is_distilled)
+        print(f"APE-GAN was trained on {def_desc} \n")
 
     with open("evaluate_results.txt", "a") as file:
-        file.write(f'{os.path.basename(os.path.normpath(adv_model_folder))}\n')
-        file.write(f'{os.path.basename(os.path.normpath(defense_model_folder))}\n')
+        file.write(f'Attack: {attack_desc}\n')
         file.write(f'{adv_accuracy.item()}\n')
 
         if eval_defense:
+            file.write(f'Restored: {def_desc}\n')
             file.write(f'{res_accuracy.item()}\n')
 
         file.write(f'\n')
