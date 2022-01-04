@@ -1,7 +1,5 @@
 class Config():
-    USER = 'akhusainov'
-    SCRATCH_PATH = f'/cluster/home/{USER}/deep-learning-project'
-    LOGS_PATH = f'{SCRATCH_PATH}/dl_logs'
+    LOGS_PATH = './dl_logs'
 
     TARGET_MODEL_FOLDER = 'target_model'
     TARGET_MODEL_WHITE_BOX_FOLDER = 'converted_secret'
