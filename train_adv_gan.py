@@ -1,11 +1,10 @@
 import os
 
-import torch
 from pl_bolts.datamodules import MNISTDataModule
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning import loggers as pl_loggers
-from pytorch_lightning.callbacks import LearningRateMonitor, Callback, ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from config import Config
 from create_paths import CreatePaths

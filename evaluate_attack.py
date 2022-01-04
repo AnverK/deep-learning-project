@@ -9,7 +9,7 @@ from create_paths import CreatePaths
 from models.adv_gan.adv_gan import AdvGAN
 # from models.adv_gan.adv_gan_reverse import AdvGAN as AdvGANReverse
 from models.ape_gan.ape_gan import ApeGan
-from models.target_models.target_model import TargetModel
+from models.target_models.target_model import TargetModel, TargetModelMNIST
 from attacks import FGSM, PGD
 
 import pytorch_lightning as pl
@@ -49,9 +49,6 @@ def load_defense(def_model_type, target_model_folder=None, defense_model_folder=
     if def_model_type == 'ape_gan':
         defense_model_path = f'{defense_model_folder}/{Config.APE_GAN_CKPT}'
         defense_model = ApeGan.load_from_checkpoint(defense_model_path, strict=False)
-    elif def_model_type == 'adv_gan_reverse':
-        defense_model_path = f'{defense_model_folder}/last.ckpt'
-        defense_model = AdvGANReverse.load_from_checkpoint(defense_model_path)
     else:
         print("This attack is not implemented!")
         return None
@@ -64,10 +61,11 @@ def evaluate(X, y, attack_model, defense_model=None):
     if not check_distance(X, X_adv, eps=args.eps):
         raise Exception("Adversarial samples has too large distance from original samples")
 
-    robust_model = TargetModel()
+    robust_model = TargetModelMNIST()
     robust_model.load_state_dict(torch.load(ROBUST_MODEL_PATH))
     robust_model.eval()
 
+    res_accuracy = None
     with torch.no_grad():
         probs = robust_model(X_adv)
         pred = torch.argmax(probs, dim=1)

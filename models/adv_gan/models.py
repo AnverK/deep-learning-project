@@ -24,7 +24,7 @@ class StudentModel(nn.Module):
 
     def forward(self, x):
         x = self.input_net(x)
-        x = x.permute(0, 2, 3, 1)  # CRUCIAL MAGIC FOR TF-compatibility
+        x = x.permute(0, 2, 3, 1)  # Convert (B, C, H, W) to (B, H, W, C) for TF-compatibility
         x = self.output_net(x)
         return x
 
@@ -38,7 +38,7 @@ class Generator(nn.Module):
 
         encoder_lis = [
             # MNIST:1*28*28
-        nn.Conv2d(latent_dim, 8, kernel_size=3, stride=1, padding=0, bias=True),
+            nn.Conv2d(latent_dim, 8, kernel_size=3, stride=1, padding=0, bias=True),
             nn.InstanceNorm2d(8),
             nn.ReLU(),
             # 8*26*26

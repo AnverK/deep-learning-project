@@ -8,6 +8,7 @@ from ..target_models.target_model import TargetModel
 
 import wandb
 
+
 def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1 or classname.find('Linear') != -1:
@@ -15,6 +16,7 @@ def weights_init(m):
     elif classname.find('BatchNorm') != -1:
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
+
 
 class ApeGan(LightningModule):
     def __init__(
@@ -25,6 +27,7 @@ class ApeGan(LightningModule):
             lr=2e-4,
             attack=None,
             target_model_dir=None,
+            target_model=None,
             num_batches_to_log=1,
             num_samples_to_log=16,
     ):
@@ -59,6 +62,8 @@ class ApeGan(LightningModule):
             self.target_model.load_state_dict(torch.load(target_model_dir))
             self.target_model.freeze()
             self.target_model.eval()
+        elif target_model is not None:
+            self.target_model = target_model
 
         self.attack_batches = []
 
@@ -185,9 +190,9 @@ class ApeGan(LightningModule):
         y_adversarial_pred = self.target_model(adv_imgs).argmax(1)
         y_restored_pred = self.target_model(res_imgs).argmax(1)
 
-        accuracy_original = accuracy(y_original_pred, labels)
-        accuracy_adversarial = accuracy(y_adversarial_pred, labels)
-        accuracy_restored = accuracy(y_restored_pred, labels)
+        accuracy_original = accuracy(y_original_pred.cpu(), labels.cpu())
+        accuracy_adversarial = accuracy(y_adversarial_pred.cpu(), labels.cpu())
+        accuracy_restored = accuracy(y_restored_pred.cpu(), labels.cpu())
 
         losses = {
             f"{stage}_accuracy_original": accuracy_original,

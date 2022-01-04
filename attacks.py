@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from cleverhans.torch.utils import optimize_linear
 
 from models.target_models.target_model import TargetModel
 
@@ -16,7 +17,8 @@ class FGSM(nn.Module):
                  norm=np.inf,
                  clip_min=0,
                  clip_max=1,
-                 target_model_dir='../target_models/pytorch/adv_trained.ckpt'):
+                 target_model_dir='../target_models/pytorch/adv_trained.ckpt',
+                 target_model=None):
         super(FGSM, self).__init__()
 
         self.eps = eps
@@ -24,22 +26,47 @@ class FGSM(nn.Module):
         self.clip_min = clip_min
         self.clip_max = clip_max
 
-        self.target_model = TargetModel()
-        self.target_model.load_state_dict(torch.load(target_model_dir))
-        self.target_model.freeze()
-        self.target_model.eval()
+        if target_model is None:
+            self.target_model = TargetModel()
+            self.target_model.load_state_dict(torch.load(target_model_dir))
+            self.target_model.freeze()
+            self.target_model.eval()
+        else:
+            self.target_model = target_model
 
     def forward(self, imgs):
-        imgs_fgsm = fast_gradient_method(
-            self.target_model,
-            imgs,
-            self.eps,
-            self.norm,
-            self.clip_min,
-            self.clip_max
-        )
+        # imgs_fgsm = fast_gradient_method(
+        #     self.target_model,
+        #     imgs,
+        #     self.eps,
+        #     self.norm,
+        #     self.clip_min,
+        #     self.clip_max
+        # )
+        imgs_fgsm = self.fast_gradient_method(imgs)
 
         return imgs_fgsm
+
+    def fast_gradient_method(
+            self,
+            x
+    ):
+        # x = x.clone().detach().to(torch.float).requires_grad_(True)
+        # _, y = torch.max(model_fn(x), 1)
+
+        # loss_fn = torch.nn.CrossEntropyLoss()
+        # loss = loss_fn(model_fn(x), y)
+
+        # Define gradient of loss wrt input
+        # loss.backward()
+        grad = self.target_model.gradient(x)
+        optimal_perturbation = optimize_linear(grad, self.eps, self.norm)
+
+        # Add perturbation to original example to obtain adversarial example
+        adv_x = x + optimal_perturbation
+
+        adv_x = torch.clamp(adv_x, self.clip_min, self.clip_max)
+        return adv_x
 
 
 class PGD(nn.Module):
@@ -50,7 +77,8 @@ class PGD(nn.Module):
                  norm=np.inf,
                  clip_min=0,
                  clip_max=1,
-                 target_model_dir='../target_models/pytorch/adv_trained.ckpt'):
+                 target_model_dir='../target_models/pytorch/adv_trained.ckpt',
+                 target_model=None):
         super(PGD, self).__init__()
 
         self.eps = eps
@@ -60,10 +88,13 @@ class PGD(nn.Module):
         self.clip_min = clip_min
         self.clip_max = clip_max
 
-        self.target_model = TargetModel()
-        self.target_model.load_state_dict(torch.load(target_model_dir))
-        self.target_model.freeze()
-        self.target_model.eval()
+        if target_model is None:
+            self.target_model = TargetModel()
+            self.target_model.load_state_dict(torch.load(target_model_dir))
+            self.target_model.freeze()
+            self.target_model.eval()
+        else:
+            self.target_model = target_model
 
     def forward(self, imgs):
         imgs_pgd = projected_gradient_descent(

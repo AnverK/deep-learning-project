@@ -1,5 +1,5 @@
 from .models import Discriminator, Generator, StudentModel
-from ..target_models.target_model import TargetModel
+from ..target_models.target_model import TargetModel, TargetModelMNIST
 from ..target_models.robust_tf_model import Model
 
 import torch
@@ -70,7 +70,7 @@ class AdvGAN(LightningModule):
         self.student_model.apply(weights_init)
 
         if not self.tensorflow:
-            self.target_model = TargetModel().to(self.device)
+            self.target_model = TargetModelMNIST().to(self.device)
             self.target_model.load_state_dict(torch.load(target_model_dir))
             self.target_model.freeze()
             self.target_model.eval()
