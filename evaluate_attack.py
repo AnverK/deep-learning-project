@@ -43,9 +43,17 @@ def load_attack(adv_model_type, target_model_folder=None, adv_model_folder=None)
     return adv_model
 
 
-def load_defense(defense_model_folder=None):
-    defense_model_path = f'{defense_model_folder}/{Config.APE_GAN_CKPT}'
-    defense_model = ApeGan.load_from_checkpoint(defense_model_path, strict=False)
+def load_defense(defense_model_folder=None, def_model='ape_gan'):
+    if def_model == 'ape_gan':
+        defense_model_path = f'{defense_model_folder}/{Config.APE_GAN_CKPT}'
+        defense_model = ApeGan.load_from_checkpoint(defense_model_path, strict=False)
+    elif def_model == 'adv_gan_reverse':
+        defense_model_path = f'{defense_model_folder}/{Config.APE_GAN_CKPT}'
+        defense_model = AdvGANReverse.load_from_checkpoint(defense_model_path,
+                                                    is_distilled='distilled' in defense_model_path,
+            target_model_dir=TARGET_MODEL_PATH,
+            attack=adv_model
+        )
     return defense_model
 
 
@@ -112,6 +120,10 @@ if __name__ == "__main__":
                         help='Specifies maximum infinite norm of adversarial perturbations. '
                              'Note that this will only applied to evaluation: '
                              'the model will not be retrained for new epsilon.')
+
+    parser.add_argument("--def-model", type=str, default='ape_gan')
+    parser.add_argument("--def-adv-gan-is-distilled", default=False, action='store_true')
+
     args = parser.parse_args()
 
     adv_path_creator = CreatePaths(args.adv_model, args.attack_is_blackbox, args.attack_is_distilled)
@@ -122,7 +134,9 @@ if __name__ == "__main__":
     if eval_defense:
         def_path_creator = CreatePaths(args.adv_model, args.def_attack_is_blackbox, args.def_attack_is_distilled)
         _, _, defense_model_folder = def_path_creator.create_paths()
-        defense_model = load_defense(defense_model_folder=defense_model_folder)
+        if args.def_model == 'adv_gan_reverse':
+            defense_model_folder = f'{Config.LOGS_PATH}/adv_gan_reversed/{args.adv_model}{"-blackbox" if Config.IS_BLACK_BOX else "-whitebox"}{"-attack_is_distilled" if args.def_attack_is_distilled else ""}{"-defense_is_distilled" if args.def_adv_gan_is_distilled else ""}'
+        defense_model = load_defense(defense_model_folder=defense_model_folder, def_model=args.def_model)
     else:
         defense_model = None
 
