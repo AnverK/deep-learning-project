@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     callbacks = [checkpoint_callback]
 
-    if device == 'cpu':
+    if device.type == 'cpu':
         gpus = None
         precision = 32
     else:
