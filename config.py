@@ -1,4 +1,4 @@
-class Config():
+class Config:
     LOGS_PATH = './dl_logs'
 
     TARGET_MODEL_FOLDER = 'target_model'
