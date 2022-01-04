@@ -24,9 +24,12 @@ if __name__ == "__main__":
     parser.add_argument("--adv-model", type=str, default='adv_gan')
     parser.add_argument("--is-blackbox", default=False, action='store_true')
     parser.add_argument("--is-distilled", default=False, action='store_true')
+    parser.add_argument("--no-wandb", default=False, action='store_true')
 
     args = parser.parse_args()
 
+    if args.no_wandb:
+        os.environ['WANDB_MODE'] = "disabled"
     os.makedirs(Config.LOGS_PATH, exist_ok=True)
     os.makedirs(f'{Config.LOGS_PATH}/{Config.APE_GAN_FOLDER}/', exist_ok=True)
 

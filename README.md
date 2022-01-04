@@ -63,7 +63,12 @@ model. So the target model is more like an oracle (or teacher) which gives the l
 the target model itself.
 
 Example of the path to corresponding checkpoint is `{LOGS_PATH}/{ADV_GAN_FOLDER}/blackbox/not_distilled`
-It will take few hours on CPU, so we highly recommend running it on GPU
+It will take few hours on CPU, so we highly recommend running it on GPU. Sometimes, when running on GPU, there is a
+problem with wandb logging. Running this command should help:
+
+```
+module load eth_proxy
+```
 
 ## How to train APE-GAN
 
@@ -102,3 +107,8 @@ also evaluates performance of APE-GAN against this AdvGAN attack while it was tr
 as target. The last flag (`--def-attack-is-distilled`) is ignored since distilled model is only supported for AdvGAN in
 our implementation.
 
+## [WandB logging ](/wandb)
+
+To look at the charts or at the images, we use [wandb](https://wandb.ai/). We highly recommend using it because it
+provides real-time plots and images (adversarial and restored) during the training. Simply sign up there, login in the
+first running and access it! If you don't want to use this feature, pass `--no-wandb` to `train_[adv|ape]_gan.py`.
