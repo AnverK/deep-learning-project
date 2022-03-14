@@ -1,4 +1,5 @@
 pytorch-lightning
+tensorflow
 lightning-bolts
 wandb~=0.12.9
 torchvision~=0.11.1
