@@ -24,8 +24,8 @@ python fetch_model.py secret
 
 ```
 cd ..
-python converter.py --tf-checkpoint-path=mnist_challenge/models/adv_trained --torch-checkpoint-path=dl_logs/target_model/adv_trained
-python converter.py --tf-checkpoint-path=mnist_challenge/models/secret --torch-checkpoint-path=dl_logs/target_model/secret
+python converter.py --tf-checkpoint-path=mnist_challenge/models/adv_trained --torch-checkpoint-path=dl_logs/target_model/converted_adv_trained
+python converter.py --tf-checkpoint-path=mnist_challenge/models/secret --torch-checkpoint-path=dl_logs/target_model/converted_secret
 ```
 
 If everything was correct, you should see the message: `OK! Accuracies are the same!` when run each of the converters.
