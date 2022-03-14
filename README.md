@@ -2,6 +2,22 @@
 
 Group project for the course Deep Learning taught in the autumn semester 2021 at ETH
 
+## Summary
+
+The goal of this project is to research different adversarial attacks and defences. Moreover, we suggest a new type of defence (adv_gan_reverse) and re-evaluate [MNIST Challenge](https://github.com/MadryLab/mnist_challenge). Shortly, MNIST Challenge is focused on attacking some secret, robust model. However, we apply [APE-GAN](https://arxiv.org/abs/1707.05474), which should eliminate some of the adversarial perturbations. Here is an example:
+
+<p float="left" align="middle">
+  <img src="/wandb_images/orignal.png" width="32%" />
+  <img src="/wandb_images/adversarial.png" width="32%" /> 
+  <img src="/wandb_images/restored.png" width="32%" />
+</p>
+
+The left image is original and is correctly classified as 5 by a robust model. In the middle, it's the same image but after a successful adversarial attack by [AdvGAN](https://arxiv.org/abs/1801.02610) (classified as 6). And the right image is the same from the middle after eliminating the adversarial perturbation by APE-GAN. And it's classified correctly again!
+
+For a more detailed explanation and more examples, please read our [paper](https://github.com/AnverK/deep-learning-project/blob/main/GAN%20Wars%20(paper).pdf).
+
+Last but not least, we tried to use PyTorch lightning modules as much as possible, so it might be convenient to re-use them. We also added [WandB logging](#wandb-logging), which makes it much easier to analyse the results and training.
+
 ## How to set up the repository
 
 1. Clone this repository and also challenge repository: https://github.com/MadryLab/mnist_challenge:
@@ -107,7 +123,7 @@ also evaluates performance of APE-GAN against this AdvGAN attack while it was tr
 as target. The last flag (`--def-attack-is-distilled`) is ignored since distilled model is only supported for AdvGAN in
 our implementation.
 
-## [WandB logging ](/wandb)
+## WandB logging
 
 To look at the charts or at the images, we use [wandb](https://wandb.ai/). We highly recommend using it because it
 provides real-time plots and images (adversarial and restored) during the training. Simply sign up there, login in the
