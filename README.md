@@ -12,9 +12,8 @@ The goal of this project is to research different adversarial attacks and defenc
   <img src="/wandb_images/restored.png" width="32%" />
 </p>
 
-The left image is original and is correctly classified as 5 by a robust model. In the middle, it's the same image but after a successful adversarial attack by [AdvGAN](https://arxiv.org/abs/1801.02610) (classified as 6). And the right image is the same from the middle after eliminating the adversarial perturbation by APE-GAN. And it's classified correctly again!
-
-For a more detailed explanation and more examples, please read our [paper](https://github.com/AnverK/deep-learning-project/blob/main/GAN%20Wars%20(paper).pdf).
+The left image is original and is correctly classified as 5 by a robust model. In the middle, it's the same image but after a successful adversarial attack by [AdvGAN](https://arxiv.org/abs/1801.02610) (classified as 6). And the right image is the same from the middle after eliminating the adversarial perturbation by APE-GAN. And it's classified correctly again! 
+For a more detailed explanation and more examples, please read our [paper](https://github.com/AnverK/deep-learning-project/blob/main/GAN%20Wars%20(paper).pdf). Note that the images above might seem blurry here because of the GitHub viewer, but you can find these images in the paper.
 
 Last but not least, we tried to use PyTorch lightning modules as much as possible, so it might be convenient to re-use them. We also added [WandB logging](#wandb-logging), which makes it much easier to analyse the results and training.
 
